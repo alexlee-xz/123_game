@@ -3,11 +3,13 @@
   'use strict';
   const NG = root.NG = root.NG || {};
   const L = NG.logic;
-  const KEY = 'numgame.v1';
+  const KEY = '123game.v1';
 
   function blank() {
     return {
       name: '', created: Date.now(),
+      resetAt: 0,            // 清空/覆盖导入的时间：同步时“更晚清空”的一边整体胜出
+      cfgAt: 0,              // 名字和设置最后改动的时间
       levels: {},            // gameId -> 1..4
       streaks: {},           // gameId -> {streakOk, streakBad}
       stats: {},             // gameId -> {rounds, ok, last, wrong:{key:count}}
@@ -34,6 +36,7 @@
 
   function save() {
     try { root.localStorage && root.localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { /* ignore */ }
+    if (NG.sync && NG.sync.touch) NG.sync.touch();     // 本机有改动，通知云同步（未开启时什么也不做）
   }
   function dayKey(t) {
     const d = t ? new Date(t) : new Date();
@@ -45,7 +48,8 @@
     save,
     dayKey,
     hasProfile: () => !!data.name,
-    setName(n) { data.name = String(n || '').trim().slice(0, 12); save(); },
+    normalize,
+    setName(n) { data.name = String(n || '').trim().slice(0, 12); data.cfgAt = Date.now(); save(); },
     getLevel: (id) => data.levels[id] || 1,
     stat: (id) => data.stats[id] || { rounds: 0, ok: 0, last: 0, wrong: {} },
 
@@ -96,7 +100,7 @@
       return m > 0 && S.todaySeconds() >= m * 60;
     },
 
-    setSetting(k, v) { data.settings[k] = v; save(); },
+    setSetting(k, v) { data.settings[k] = v; data.cfgAt = Date.now(); save(); },
 
     // 推荐：最久没玩（或没玩过）的游戏
     recommend(games) {
@@ -112,9 +116,15 @@
     importJSON(text) {
       const d = JSON.parse(text);
       if (!d || typeof d !== 'object' || !d.levels || !d.stats) throw new Error('不是有效的记录');
-      data = normalize(d); save();
+      data = normalize(d); data.resetAt = Date.now(); data.cfgAt = data.resetAt; save();   // 覆盖导入：同步时以这份为准
     },
-    reset() { data = blank(); save(); }
+    reset() { data = blank(); data.resetAt = Date.now(); save(); },
+
+    // 把合并后的云端记录写回本机（不是孩子的操作，不触发上传）
+    replaceFromSync(d) {
+      data = normalize(d);
+      try { root.localStorage && root.localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { /* ignore */ }
+    }
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = S;

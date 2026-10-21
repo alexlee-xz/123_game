@@ -215,3 +215,9 @@ svg.blk, svg.dots, svg.fingers { max-width: 100%; height: auto; }
   .busbody { grid-template-columns: repeat(5, minmax(0, 46px)); } .animal { font-size: 30px; }
   .tenframe { grid-template-columns: repeat(5, 46px); } .tf-cell { width: 46px; height: 46px; }
 }
+
+/* cloud sync */
+.codebox { font-family: Consolas, monospace; font-size: 18px; letter-spacing: 1px; background: #f3f0ff; padding: 2px 8px; border-radius: 8px; user-select: text; word-break: break-all; }
+.restore { margin-top: 14px; max-width: 100%; }
+.restore summary { cursor: pointer; padding: 8px; }
+.card input[type=text] { max-width: 100%; box-sizing: border-box; }

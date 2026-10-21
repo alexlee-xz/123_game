@@ -31,6 +31,68 @@
       h('button', { class: 'btn primary', type: 'button', onClick: ok }, '进入'), msg));
   };
 
+  function syncCard() {
+    const Y = NG.sync;
+    const card = h('div', { class: 'card' });
+    let statusEl = null, msgText = '';
+    const refreshStatus = () => { if (statusEl) statusEl.textContent = Y.statusText(); };
+    const listener = () => {
+      if (!card.isConnected) { const i = Y.listeners.indexOf(listener); if (i >= 0) Y.listeners.splice(i, 1); return; }
+      refreshStatus();
+    };
+    Y.listeners.push(listener);
+
+    const say = (t) => { msgText = t; render(); };
+    const act = async (fn, okMsg) => {      // 跑一个异步动作：期间显示“正在处理”，结束后显示结果
+      say('正在处理…');
+      let r;
+      try { r = await fn(); } catch (e) { r = { err: (e && e.message) || '失败' }; }
+      say(r && r.err ? '⚠️ ' + r.err : okMsg || '');
+    };
+
+    function render() {
+      card.innerHTML = '';
+      card.appendChild(h('h3', null, '☁️ 云同步'));
+      const msg = h('div', { class: 'small' }, msgText);
+      if (!Y.on()) {
+        statusEl = null;
+        card.appendChild(h('div', { class: 'small' }, '开启后，多台设备（平板、手机、电脑）会自动共用同一份学习记录。未开启时记录只在本机，不会联网。'));
+        if (Y.pending) {
+          const p = Y.pending;
+          card.appendChild(h('div', { class: 'card', style: { background: '#fff8e1' } },
+            h('b', null, '收到一个同步邀请'),
+            h('div', { class: 'small' }, '同步码 ' + Y.fmtCode(p.code) + '。加入后会把这台设备和云端的记录合并，两边的进度都不会丢。'),
+            h('div', { class: 'row' },
+              h('button', { class: 'btn primary', type: 'button', onClick: () => { Y.pending = null; act(() => Y.join(p), '已加入同步'); } }, '加入'),
+              h('button', { class: 'btn', type: 'button', onClick: () => { Y.pending = null; render(); } }, '忽略'))));
+        }
+        card.appendChild(h('div', { class: 'row' },
+          h('button', { class: 'btn primary', type: 'button', onClick: () => { Y.enable('', Y.newCode()); act(() => Y.now(), '已开启。请在其它设备上用下面的同步码或邀请链接加入。'); } }, '开启同步（生成新同步码）')));
+        const inp = h('input', { type: 'text', class: 'nameinput', placeholder: '已有同步码或邀请链接', style: { fontSize: '16px', maxWidth: '100%' } });
+        card.appendChild(h('div', { class: 'row' }, inp,
+          h('button', { class: 'btn', type: 'button', onClick: () => act(() => Y.join(inp.value), '已加入同步') }, '加入')));
+      } else {
+        const code = Y.fmtCode(Y.state.code), link = Y.link();
+        statusEl = h('div', { class: 'kv' }, Y.statusText());
+        card.appendChild(statusEl);
+        card.appendChild(h('div', { class: 'kv' }, h('b', null, '同步码'), ' ', h('span', { class: 'codebox' }, code)));
+        card.appendChild(h('div', { class: 'small' }, '在其它设备的“家长页 → 云同步”里输入同步码，或直接打开下面的邀请链接。请只分享给家人：知道同步码的人都能看到和修改记录。'));
+        if (link) {
+          const li = h('input', { type: 'text', readonly: true, value: link, style: { width: '100%', fontSize: '13px' } });
+          li.addEventListener('focus', () => li.select());
+          card.appendChild(li);
+        }
+        card.appendChild(h('div', { class: 'row' },
+          h('button', { class: 'btn primary', type: 'button', onClick: () => act(() => Y.now(), '') }, '立即同步'),
+          h('button', { class: 'btn', type: 'button', onClick: () => { if (confirm('关闭后这台设备不再同步，本机记录保留。确定吗？')) { Y.leave(); say('已关闭同步'); } } }, '关闭同步'),
+          h('button', { class: 'btn', type: 'button', onClick: () => { if (confirm('确定删除云端的全部记录吗？本机记录不受影响，之后有设备同步时会把记录重新上传。')) act(() => Y.wipeCloud().then(() => ({})), '云端记录已删除'); } }, '删除云端记录')));
+      }
+      card.appendChild(msg);
+    }
+    render();
+    return card;
+  }
+
   function dashboard(body) {
     const d = NG.store.get();
     const mins = Math.round(NG.store.todaySeconds() / 60);
@@ -91,11 +153,14 @@
       h('label', { class: 'kv' }, '每天玩多久后提醒休息 ', rest),
       h('label', { class: 'kv' }, '声音和朗读 ', voice)));
 
+    // 云同步
+    body.appendChild(syncCard());
+
     // 备份
     const ta = h('textarea', { rows: 4, class: 'backup', placeholder: '把备份文字粘贴到这里，再点“导入”' });
     const bmsg = h('div', { class: 'small' });
     body.appendChild(h('div', { class: 'card' }, h('h3', null, '备份与换设备'),
-      h('div', { class: 'small' }, '记录只保存在这台设备的浏览器里。换设备前请先复制备份。'),
+      h('div', { class: 'small' }, '记录默认保存在这台设备的浏览器里，换设备可以用上面的“云同步”，也可以手动复制备份。'),
       h('div', { class: 'row' },
         h('button', { class: 'btn', type: 'button', onClick: () => { ta.value = NG.store.exportJSON(); ta.select(); try { document.execCommand('copy'); bmsg.textContent = '已生成并复制'; } catch (e) { bmsg.textContent = '已生成，请手动复制'; } } }, '导出'),
         h('button', { class: 'btn', type: 'button', onClick: () => { try { NG.store.importJSON(ta.value); bmsg.textContent = '导入成功'; NG.go('/'); } catch (e) { bmsg.textContent = '导入失败：' + e.message; } } }, '导入')),

@@ -1,6 +1,6 @@
-# 方块小镇 · 4-6 岁数学小游戏
+# 数学小游戏
 
-给 4-6 岁小朋友学数数、写数字、加减法的网页小游戏。纯静态页面（HTML + CSS + JS），不需要安装、不需要服务器，手机、平板、电脑的浏览器里直接打开。
+给小朋友学数数、写数字、加减法的网页小游戏。纯静态页面（HTML + CSS + JS），不需要安装、不需要服务器，手机、平板、电脑的浏览器里直接打开。
 
 灵感来自 *Numberblocks* 的“数是有形状的”这一思路，画面、角色和代码都是原创。
 
@@ -21,7 +21,7 @@
 | | 数字配对 | 数字、点阵、手势、方块塔之间找“一样多” | 同一个数的多种表征 |
 | 2 描红写数字 | 描红写数字 | 沿笔顺描写，再到听写，最后写两位数 | 具身认知、口诀（1 像铅笔细又长……） |
 | 3 合体加法 | 积木合体 | 把两堆方块拖到一起，数出一共几个；高级时找“缺少的加数” | CPA：先具象，后图像，再符号 |
-| | 上下车 | 小动物上车是加、下车是减，用小故事做算术 | 情境化学习 |
+| | 上下车 | 小动物上车是加、下车是减，用小故事做算术（上、下车时只说“上来了 N 只/下车了 N 只”，车上共有几只留给孩子自己算） | 情境化学习 |
 | | 天平 | 往右盘放方块，让两边一样多 | 理解等号是“一样多” |
 | 4 分身减法 | 积木掉落 | 点方块塔，把方块拿走，数还剩几个 | 减法是“拿走” |
 | | 拆数房子 | 5 号房子里住着哪两个数 | Part-Whole（部分-整体） |
@@ -46,6 +46,8 @@ index.html               入口
 css/style.css
 js/core/logic.js         纯逻辑：出题器、自适应、描红笔画数据与判定器（Node 里可测）
 js/core/store.js         本地存储（localStorage）：进度、等级、统计、贴纸、设置
+js/core/sync.js          云同步客户端：合并规则、上传/拉取、同步码和邀请链接
+cloud/                   Cloudflare Worker + D1（云同步后端）
 js/core/audio.js         朗读（Web Speech）+ WebAudio 合成音效，无需音频文件
 js/core/blocks.js        方块塔 / 点阵 / 手指 / 硬币的 SVG 绘制
 js/core/ui.js            DOM 小工具、选择题按钮、庆祝动画
@@ -78,6 +80,8 @@ NG.registerGame({
 
 ```powershell
 node tests/test_logic.js                      # 纯逻辑：出题不变量、自适应、描红判定、存储
+node tests/test_sync.js                       # 多设备同步模拟：合并规则（随机数据检验交换/结合/幂等）、离线分叉、409 竞争、清空
+node tests/test_cloud.js                      # 连真实的云端 Worker 跑端到端测试（需要网络；数据用完即删）
 powershell -NoProfile -File tests\run_smoke.ps1   # 用无头 Edge 跑完整浏览器流程
 powershell -NoProfile -File tests\run_smoke.ps1 -Width 320   # 模拟更窄的手机屏
 ```
@@ -86,7 +90,35 @@ powershell -NoProfile -File tests\run_smoke.ps1 -Width 320   # 模拟更窄的�
 
 ## 数据与隐私
 
-学习记录只保存在当前浏览器的 localStorage，不联网、不上传。换设备前，在家长页“备份与换设备”里导出，再到新设备导入。
+学习记录默认只保存在当前浏览器的 localStorage，不联网、不上传。可以在家长页手动导出/导入备份，也可以开启下面的“云同步”。云同步默认关闭，开启后才会联网；云端只存同步码的 SHA-256（加盐），不存同步码本身。
+
+## 云同步（Cloudflare Workers + D1）
+
+家长页 → “云同步”：在一台设备上“开启同步”得到 20 位同步码和邀请链接，其它设备输入同步码（或打开链接）即可。欢迎页也有“用同步码找回记录”。
+
+- **合并而不是覆盖**：两台设备各自离线玩也不会丢。每个游戏以最近玩过的一边为准（等级、连续答对），星星取大值，贴纸取并集，答题记录去重合并，每天时长取大值；合并满足交换律、结合律、幂等，三台设备不论怎么同步都会收敛到同一份。
+- **乐观锁**：上传时带上“我基于的版本”，云端不一致就返回 409，客户端自动拉取、合并后重传。
+- **离线优先**：没网照常玩，改动存在本机，网络回来后自动上传。孩子正在玩游戏时不会因为同步而被打断。
+- **“清空全部记录”会同步到所有设备**（否则别的设备会把旧记录传回来）。
+- 知道同步码的人都能看到和修改记录，请只分享给家人。
+
+### 部署自己的云端
+
+```powershell
+cd cloud
+npx wrangler login
+npx wrangler d1 create 123-sync                  # 把输出的 database_id 填进 wrangler.toml
+npx wrangler d1 execute 123-sync --remote --file=schema.sql
+npx wrangler deploy                              # 得到 https://123-sync.<你的子域>.workers.dev
+```
+
+然后把 `js/core/sync.js` 顶部的 `SYNC_URL` 改成你的 Worker 地址。若网页部署在自己的域名上，把该域名加到 `wrangler.toml` 的 `ORIGINS`（跨域白名单）后重新部署。
+
+为什么用独立的 `123-sync`，而不是和其它项目（如 abc_game 的 `abc-sync`）共用同一个后端：数据互相隔离，禁用/删除/改版本互不影响，各自有各自的同源白名单和哈希盐。
+
+为什么用 D1 而不是 KV：同步需要“版本号匹配才允许写入”这种原子条件更新（`UPDATE ... WHERE rev = ?`）。KV 是最终一致、没有条件写入，两台设备同时写时会静默覆盖。
+
+API：`GET /api/ping`、`GET /api/kids`、`GET|PUT|DELETE /api/kid/:id`、`DELETE /api/family`，鉴权用请求头 `X-Family`。
 
 ## 已知限制
 

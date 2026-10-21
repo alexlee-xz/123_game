@@ -1,10 +1,11 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><title>smoke</title><link rel="stylesheet" href="../css/style.css"></head>
 <body>
 <div class="screen play" id="host" style="width:360px;margin:0;min-height:0"></div>
 <pre id="out">RUNNING</pre>
 <script src="../js/core/logic.js"></script>
 <script src="../js/core/store.js"></script>
+<script src="../js/core/sync.js"></script>
 <script src="../js/core/audio.js"></script>
 <script src="../js/core/blocks.js"></script>
 <script src="../js/core/ui.js"></script>
@@ -290,6 +291,26 @@
     click(Array.prototype.find.call(host.querySelectorAll('button'), b => b.textContent === '进入'));
     if (host.querySelectorAll('.card').length < 6) throw new Error('家长页内容不全');
     if (host.querySelectorAll('table tbody tr').length !== NG.games.length) throw new Error('家长页游戏行数不对');
+
+    // 云同步卡片：关闭 -> 开启（假的 fetch，不联网）-> 显示同步码和邀请链接 -> 关闭
+    const realFetch = window.fetch;
+    window.fetch = async () => ({ status: 503, ok: false, json: async () => ({}) });
+    try {
+      const btn = t => Array.prototype.find.call(host.querySelectorAll('button'), b => b.textContent.indexOf(t) === 0);
+      if (!/云同步/.test(host.textContent)) throw new Error('家长页缺少云同步卡片');
+      if (NG.sync.on()) throw new Error('默认不应开启同步');
+      click(btn('开启同步'));
+      if (!NG.sync.on() || !NG.sync.validCode(NG.sync.state.code)) throw new Error('开启同步后没有有效同步码');
+      if (!host.querySelector('.codebox') || host.querySelector('.codebox').textContent.replace(/-/g, '').length !== 20) throw new Error('没有显示同步码');
+      if (!btn('立即同步') || !btn('关闭同步') || !btn('删除云端记录')) throw new Error('同步按钮不全');
+      await tick(50);
+      const sc = Array.prototype.find.call(host.querySelectorAll('.card'), c => c.querySelector('.codebox'));
+      const s = sc.querySelector('.kv').textContent;
+      if (!/(同步|连|云端)/.test(s)) throw new Error('同步状态没有显示：' + s);
+      NG.sync.leave();
+    } finally { window.fetch = realFetch; NG.sync.leave(); }
+    host.innerHTML = ''; NG.pages.welcome(host);
+    if (!host.querySelector('details.restore')) throw new Error('欢迎页缺少“用同步码找回记录”');
   });
 
   /* ---- 6. 真实会话：5 题 → 结算、升级、星星、贴纸 ---- */
@@ -354,3 +375,4 @@
 })().catch(e => { document.getElementById('out').textContent = 'CRASH ' + (e && e.stack || e); });
 </script>
 </body></html>
+

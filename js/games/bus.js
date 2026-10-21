@@ -48,8 +48,9 @@
             NG.audio.sfx.pop();
             const slot = onBus; onBus++; moved++;
             api.after(250, () => { w.remove(); seatAnimal(slot).classList.add('pop'); });
-            api.say(L.numZh(onBus));
-            info.textContent = '车上有 ' + onBus + ' 只';
+            // 只报“上来了几只”，不报车上总数，否则就把答案说出来了
+            api.say(L.numZh(moved));
+            info.textContent = '上来了 ' + moved + ' 只';
             if (moved === q.k) api.after(1000, ask);
           });
           stop.appendChild(w);
@@ -63,8 +64,8 @@
           animals[i].classList.add('leaving');
           NG.audio.sfx.pop();
           onBus--; moved++;
-          api.say(L.numZh(onBus));
-          info.textContent = '车上有 ' + onBus + ' 只';
+          api.say(L.numZh(moved));
+          info.textContent = '下车了 ' + moved + ' 只';
           if (moved === q.k) api.after(1000, ask);
         };
         for (let i = 0; i < q.n; i++) animals[i].addEventListener('click', handler(i));

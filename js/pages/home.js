@@ -26,13 +26,33 @@
       go('/');
     };
     input.addEventListener('keydown', e => { if (e.key === 'Enter') start(); });
+
+    // 已经在别的设备玩过：用同步码或邀请链接把记录找回来
+    const pend = NG.sync.pending;
+    const codeIn = h('input', { type: 'text', class: 'nameinput', placeholder: '同步码或邀请链接', value: pend ? NG.sync.fmtCode(pend.code) : '', style: { fontSize: '16px' } });
+    const rmsg = h('div', { class: 'small' });
+    const restoreBtn = h('button', { class: 'btn', type: 'button' }, '找回记录');
+    restoreBtn.addEventListener('click', async () => {
+      restoreBtn.disabled = true; rmsg.textContent = '正在连接云端…';
+      const r = await NG.sync.join(codeIn.value, { needRemote: true });
+      restoreBtn.disabled = false;
+      if (r.err) { rmsg.textContent = '⚠️ ' + r.err; return; }
+      NG.sync.pending = null;
+      go('/');                 // 同步完成时 app.js 已经刷新了页面，这里只管把地址切回首页
+    });
+    const restore = h('details', { class: 'restore' },
+      h('summary', { class: 'small' }, '已经在别的设备玩过？用同步码找回记录'),
+      h('div', { class: 'row' }, codeIn, restoreBtn), rmsg);
+    if (pend) restore.open = true;
+
     rootEl.appendChild(h('div', { class: 'screen welcome' },
       h('div', { class: 'logo', html: NG.blocks.stack(3, { unit: 40 }) + NG.blocks.stack(5, { unit: 40 }) + NG.blocks.stack(7, { unit: 40 }) }),
       h('h1', null, '方块小镇'),
       h('p', null, '数字小人在等你！你叫什么名字呀？'),
       input,
       h('button', { class: 'btn primary big', type: 'button', onClick: start }, '开始玩'),
-      h('p', { class: 'small' }, '请打开声音。游戏会读题目，不认识字也能玩。')));
+      h('p', { class: 'small' }, '请打开声音。游戏会读题目，不认识字也能玩。'),
+      restore));
   };
 
   pages.home = function (rootEl) {
