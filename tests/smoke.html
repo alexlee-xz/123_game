@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>smoke</title><link rel="stylesheet" href="../css/style.css"></head>
+<body>
+<div class="screen play" id="host" style="width:360px;margin:0;min-height:0"></div>
+<pre id="out">RUNNING</pre>
+<script src="../js/core/logic.js"></script>
+<script src="../js/core/store.js"></script>
+<script src="../js/core/audio.js"></script>
+<script src="../js/core/blocks.js"></script>
+<script src="../js/core/ui.js"></script>
+<script src="../js/core/session.js"></script>
+<script src="../js/games/registry.js"></script>
+<script src="../js/games/count.js"></script>
+<script src="../js/games/subitize.js"></script>
+<script src="../js/games/match.js"></script>
+<script src="../js/games/trace.js"></script>
+<script src="../js/games/merge.js"></script>
+<script src="../js/games/bus.js"></script>
+<script src="../js/games/balance.js"></script>
+<script src="../js/games/split.js"></script>
+<script src="../js/games/tenframe.js"></script>
+<script src="../js/games/shop.js"></script>
+<script src="../js/games/challenge.js"></script>
+<script src="../js/pages/home.js"></script>
+<script src="../js/pages/parent.js"></script>
+<script>
+(async function () {
+  const NG = window.NG, L = NG.logic;
+  const out = [], errors = [];
+  let fails = 0, passes = 0;
+  window.addEventListener('error', e => errors.push('window.onerror: ' + e.message));
+  window.addEventListener('unhandledrejection', e => errors.push('unhandledrejection: ' + (e.reason && e.reason.message || e.reason)));
+  const tick = (ms) => new Promise(r => setTimeout(r, ms || 20));
+  const host = document.getElementById('host');
+
+  async function check(name, fn) {
+    try { await fn(); passes++; }
+    catch (e) { fails++; out.push('FAIL ' + name + ' :: ' + (e && e.message || e)); }
+  }
+
+  /* 记录最近一次出题和挑战关选中的游戏，方便驱动 */
+  const cap = { q: null, pick: null };
+  Object.keys(L).filter(k => /^gen/.test(k)).forEach(k => {
+    const o = L[k]; L[k] = function () { const q = o.apply(this, arguments); cap.q = q; return q; };
+  });
+  const op = L.pickChallenge; L.pickChallenge = function () { const id = op.apply(this, arguments); cap.pick = id; return id; };
+
+  function mkApi(level, stage) {
+    const log = { right: 0, wrong: 0, prompts: [] };
+    const api = {
+      stage, level,
+      locked: false,
+      get wrongs() { return log.wrong; },
+      prompt(t) { log.prompts.push(t); },
+      say() { return Promise.resolve(); },
+      after(ms, fn) { return setTimeout(fn, 0); },
+      right() { if (api.locked) return; api.locked = true; log.right++; },
+      wrong(o) {
+        if (api.locked) return;
+        log.wrong++;
+        if (log.wrong >= 2) { if (o && o.reveal) o.reveal(); api.locked = true; }
+      }
+    };
+    return { api, log };
+  }
+  function fresh() { host.innerHTML = ''; const st = document.createElement('div'); st.className = 'stage'; host.appendChild(st); return st; }
+
+  // 横向溢出检查：任何 HTML 元素超出视口宽度就记录（SVG 内部元素不查）
+  const overflow = {};
+  function checkOverflow(tag) {
+    const hr = host.getBoundingClientRect(), W = hr.right;
+    let worst = 0, who = '';
+    host.querySelectorAll('*').forEach(el => {
+      if (el.closest('svg') && el.tagName.toLowerCase() !== 'svg') return;
+      const r = el.getBoundingClientRect();
+      if (!r.width || getComputedStyle(el).opacity === '0') return;   // 淡出的动画元素不算
+      const o = Math.max(r.right - W, hr.left - r.left);
+      if (o > worst) { worst = o; who = el.tagName.toLowerCase() + '.' + (el.getAttribute('class') || ''); }
+    });
+    if (worst > 1 && !(tag in overflow)) overflow[tag] = Math.round(worst) + 'px @ ' + who;
+  }
+
+  /* 各游戏的“解题机器人”：做完操作后返回正确选项在按钮行里的位置 */
+  const click = (el) => el.click();
+  const drivers = {
+    count: async (q, st) => { st.querySelectorAll('.item').forEach(click); await tick(1100); return q.options.indexOf(q.n); },
+    subitize: async (q) => { await tick(); return q.options.indexOf(q.n); },
+    match: async (q) => q.options.indexOf(q.n),
+    merge: async (q, st) => {
+      if (q.kind === 'add') { click(st.querySelector('button.primary')); await tick(60); }
+      return q.options.indexOf(q.answer);
+    },
+    take: async (q, st) => { const t = st.querySelector('.tower.tap'); for (let i = 0; i < q.k; i++) click(t); await tick(); return q.options.indexOf(q.answer); },
+    bus: async (q, st) => {
+      if (q.op === 'add') st.querySelectorAll('.animal.waiting').forEach(click);
+      else Array.prototype.slice.call(st.querySelectorAll('.seat .animal'), 0, q.k).forEach(click);
+      await tick(); return q.options.indexOf(q.answer);
+    },
+    split: async (q) => q.mode === 'missing' ? q.options.indexOf(q.answer) : q.answerIndex,
+    tenframe: async (q, st) => {
+      if (q.mode === 'fill') { Array.prototype.slice.call(st.querySelectorAll('.tf-cell:not(.on)')).forEach(click); await tick(); }
+      return q.options.indexOf(q.answer);
+    },
+    shop: async (q) => q.options.indexOf(q.answer)
+  };
+
+  async function runChoice(id, level, wrongPath) {
+    const st = fresh(), { api, log } = mkApi(level, st);
+    cap.q = null; cap.pick = null;
+    NG.byId(id).round(level, api);
+    const key = id === 'challenge' ? cap.pick : id;
+    if (key === 'balance' || (key === 'shop' && cap.q.mode === 'pay')) {
+      if (wrongPath) return;     // 这两类的答错路径在下面单独测
+      const q = cap.q;
+      if (key === 'balance') {
+        const add = Array.prototype.find.call(st.querySelectorAll('button'), b => b.textContent.indexOf('放一块') >= 0);
+        for (let k = 0; k < q.need; k++) { click(add); await tick(10); }
+      } else {
+        const coinBtns = Array.prototype.slice.call(st.querySelectorAll('.coinbtn'));
+        L.minCoins(q.price).forEach(v => click(coinBtns[L.COINS.indexOf(v)]));
+        click(Array.prototype.find.call(st.querySelectorAll('button'), b => b.textContent === '付钱'));
+      }
+      await tick();
+      if (log.right !== 1 || log.wrong !== 0) throw new Error(key + ' 在挑战关里答对路径异常 ' + JSON.stringify(log));
+      return;
+    }
+    if (!drivers[key]) throw new Error('没有驱动 ' + key);
+    const q = cap.q;
+    const idx = await drivers[key](q, st);
+    const row = st.querySelector('.choices');
+    if (!row) throw new Error('没有出现选择按钮 (' + key + ')');
+    const btns = Array.prototype.slice.call(row.children);
+    if (idx < 0 || idx >= btns.length) throw new Error('找不到正确选项位置 ' + idx);
+    checkOverflow(key + ' L' + level);
+    if (!wrongPath) {
+      click(btns[idx]); await tick();
+      if (log.right !== 1 || log.wrong !== 0) throw new Error('答对路径异常 ' + JSON.stringify(log));
+    } else {
+      const others = btns.filter((_, i) => i !== idx);
+      click(others[0]); click(others[1]); await tick();
+      if (log.wrong !== 2 || !st.querySelector('.choice.hint')) throw new Error('答错两次后应亮出正确答案 ' + JSON.stringify(log));
+      click(btns[idx]); await tick();
+      if (log.right !== 0) throw new Error('锁定后不应再记答对');
+    }
+  }
+
+  /* ---- 1. 选择题类游戏 ---- */
+  const choiceGames = ['count', 'subitize', 'match', 'merge', 'take', 'bus', 'split', 'tenframe', 'challenge'];
+  for (const id of choiceGames) {
+    for (let level = 1; level <= 4; level++) {
+      for (let i = 0; i < 6; i++) await check(id + ' L' + level + ' 答对#' + i, () => runChoice(id, level, false));
+      for (let i = 0; i < 2; i++) await check(id + ' L' + level + ' 答错#' + i, () => runChoice(id, level, true));
+    }
+  }
+  // 小商店：找零是选择题，付钱要放硬币
+  for (let level = 1; level <= 4; level++) {
+    for (let i = 0; i < 6; i++) {
+      await check('shop L' + level + ' #' + i, async () => {
+        const st = fresh(), { api, log } = mkApi(level, st);
+        cap.q = null; NG.byId('shop').round(level, api);
+        const q = cap.q;
+        if (q.mode === 'change') {
+          const btns = Array.prototype.slice.call(st.querySelector('.choices').children);
+          click(btns[q.options.indexOf(q.answer)]); await tick();
+        } else {
+          const coinBtns = Array.prototype.slice.call(st.querySelectorAll('.coinbtn'));
+          L.minCoins(q.price).forEach(v => click(coinBtns[L.COINS.indexOf(v)]));
+          checkOverflow('shop-pay L' + level);
+          click(Array.prototype.find.call(st.querySelectorAll('button'), b => b.textContent === '付钱'));
+          await tick();
+        }
+        if (log.right !== 1 || log.wrong !== 0) throw new Error(JSON.stringify(log) + ' ' + JSON.stringify(q));
+      });
+      await check('shop-wrong L' + level + ' #' + i, async () => {
+        const st = fresh(), { api, log } = mkApi(level, st);
+        cap.q = null; NG.byId('shop').round(level, api);
+        const q = cap.q;
+        if (q.mode !== 'pay') return;
+        const coinBtns = Array.prototype.slice.call(st.querySelectorAll('.coinbtn'));
+        const pay = Array.prototype.find.call(st.querySelectorAll('button'), b => b.textContent === '付钱');
+        click(coinBtns[L.COINS.indexOf(q.price === 5 ? 2 : 5)]);   // 故意给错的钱数
+        click(pay); click(pay);
+        if (log.wrong !== 2) throw new Error('应答错两次 ' + JSON.stringify(log));
+        const total = Array.prototype.reduce.call(st.querySelectorAll('.traycoin svg text'), (a, t) => a + parseInt(t.textContent, 10), 0);
+        if (total !== q.price) throw new Error('演示付款应刚好等于价格 ' + total + '/' + q.price);
+      });
+    }
+  }
+
+  /* ---- 2. 天平 ---- */
+  for (let level = 1; level <= 4; level++) {
+    for (let i = 0; i < 6; i++) {
+      await check('balance L' + level + ' 平衡#' + i, async () => {
+        const st = fresh(), { api, log } = mkApi(level, st);
+        cap.q = null; NG.byId('balance').round(level, api);
+        const q = cap.q;
+        const add = Array.prototype.find.call(st.querySelectorAll('button'), b => b.textContent.indexOf('放一块') >= 0);
+        checkOverflow('balance L' + level);
+        for (let k = 0; k < q.need; k++) { click(add); await tick(10); }
+        await tick();
+        if (log.right !== 1 || log.wrong !== 0) throw new Error(JSON.stringify(log));
+        if (st.querySelectorAll('.panR rect.added').length !== q.need) throw new Error('右盘蓝块数不对');
+      });
+    }
+    await check('balance L' + level + ' 放多了', async () => {
+      const st = fresh(), { api, log } = mkApi(level, st);
+      cap.q = null; NG.byId('balance').round(level, api);
+      const q = cap.q;
+      const add = Array.prototype.find.call(st.querySelectorAll('button'), b => b.textContent.indexOf('放一块') >= 0);
+      for (let k = 0; k < q.need + 1; k++) click(add);
+      await tick(10);
+      if (log.right !== 0 || log.wrong !== 2) throw new Error('放多了应记错 ' + JSON.stringify(log));
+      if (st.querySelectorAll('.panR rect.added').length !== q.need) throw new Error('演示后应平衡');
+    });
+  }
+
+  /* ---- 3. 描红 ---- */
+  function traceRig(level) {
+    const st = fresh(), { api, log } = mkApi(level, st);
+    cap.q = null; NG.byId('trace').round(level, api);
+    const q = cap.q, svg = st.querySelector('svg.tracepad'), lay = L.layoutText(q.text);
+    const toClient = (p) => { const pt = svg.createSVGPoint(); pt.x = p[0]; pt.y = p[1]; const c = pt.matrixTransform(svg.getScreenCTM()); return [c.x, c.y]; };
+    const fire = (type, p) => { const c = toClient(p); svg.dispatchEvent(new PointerEvent(type, { clientX: c[0], clientY: c[1], pointerId: 1, bubbles: true, cancelable: true })); };
+    const stroke = (pts, frac) => {
+      const d = L.densify(pts, 8), n = Math.max(2, Math.floor(d.length * (frac || 1)));
+      fire('pointerdown', d[0]);
+      for (let i = 1; i < n; i++) fire('pointermove', d[i]);
+      fire('pointerup', d[n - 1]);
+    };
+    return { st, api, log, q, svg, lay, stroke, fire };
+  }
+  for (let level = 1; level <= 4; level++) {
+    for (let i = 0; i < 5; i++) {
+      await check('trace L' + level + ' 写对#' + i, async () => {
+        const r = traceRig(level);
+        if (!r.svg.getScreenCTM()) throw new Error('svg 没有布局');
+        checkOverflow('trace L' + level);
+        r.lay.strokes.forEach(s => r.stroke(s.pts));
+        if (r.log.right !== 1 || r.log.wrong !== 0) throw new Error(r.q.text + ' ' + JSON.stringify(r.log));
+        if (r.svg.querySelectorAll('.inkdone path').length !== r.lay.strokes.length) throw new Error('完成的笔画数不对');
+      });
+    }
+    await check('trace L' + level + ' 半途抬笔 + 写错起点', async () => {
+      const r = traceRig(level);
+      const s0 = r.lay.strokes[0];
+      r.fire('pointerdown', [-20, 200]); r.fire('pointermove', [0, 100]); r.fire('pointerup', [0, 100]);   // 起笔不在起点
+      r.stroke(s0.pts, 0.4);                                   // 抬笔太早 -> fails 1
+      if (r.log.wrong !== 0) throw new Error('第 1 次失败不应记错');
+      r.stroke(s0.pts, 0.4);                                   // fails 2 -> 记第 1 次错
+      if (r.log.wrong !== 1) throw new Error('第 2 次失败应记 1 次错 ' + JSON.stringify(r.log));
+      r.stroke(s0.pts, 0.4); r.stroke(s0.pts, 0.4);            // fails 4 -> 演示
+      if (r.log.wrong !== 2 || !r.api.locked) throw new Error('应进入演示 ' + JSON.stringify(r.log));
+    });
+  }
+
+  /* ---- 4. 方块、点阵、手指、硬币 SVG 合法 ---- */
+  await check('SVG 合法', async () => {
+    const B = NG.blocks, parser = new DOMParser();
+    const bad = [];
+    const test = (name, s) => { const d = parser.parseFromString(s, 'image/svg+xml'); if (d.querySelector('parsererror')) bad.push(name); };
+    for (let n = 0; n <= 20; n++) { test('stack' + n, B.stack(n, { unit: 30 })); test('dots' + n, B.dots(n)); test('fingers' + n, B.fingers(n)); }
+    [1, 2, 5, 10].forEach(v => test('coin' + v, B.coin(v)));
+    if (bad.length) throw new Error(bad.join(','));
+    // 方块塔格子数 = n
+    for (let n = 1; n <= 20; n++) {
+      const d = parser.parseFromString(B.stack(n), 'image/svg+xml');
+      if (d.querySelectorAll('.cell').length !== n) throw new Error('stack ' + n + ' 格数不对');
+    }
+    // 点阵圆点数 = n
+    for (let n = 1; n <= 10; n++) {
+      const d = parser.parseFromString(B.dots(n), 'image/svg+xml');
+      if (d.querySelectorAll('circle').length !== n) throw new Error('dots ' + n + ' 点数不对');
+    }
+  });
+
+  /* ---- 5. 页面渲染 ---- */
+  await check('首页/贴纸册/家长页', async () => {
+    NG.store.reset(); NG.store.setName('测试');
+    host.innerHTML = ''; NG.pages.home(host);
+    const tiles = host.querySelectorAll('.tile').length;
+    if (tiles !== NG.games.length) throw new Error('首页游戏卡片数 ' + tiles + ' != ' + NG.games.length);
+    if (!host.querySelector('.hero')) throw new Error('缺少今日推荐');
+    host.innerHTML = ''; NG.pages.stickers(host);
+    if (host.querySelectorAll('.sticker.slot').length !== L.STICKERS.length) throw new Error('贴纸册格数不对');
+    host.innerHTML = ''; NG.pages.welcome(host);
+    if (!host.querySelector('input')) throw new Error('欢迎页缺少输入框');
+    host.innerHTML = ''; NG.pages.parent(host);
+    const eq = host.querySelector('h2').textContent.match(/(\d+) \+ (\d+)/);
+    host.querySelector('input').value = String(+eq[1] + +eq[2]);
+    click(Array.prototype.find.call(host.querySelectorAll('button'), b => b.textContent === '进入'));
+    if (host.querySelectorAll('.card').length < 6) throw new Error('家长页内容不全');
+    if (host.querySelectorAll('table tbody tr').length !== NG.games.length) throw new Error('家长页游戏行数不对');
+  });
+
+  /* ---- 6. 真实会话：5 题 → 结算、升级、星星、贴纸 ---- */
+  await check('真实会话：数数乐 5 题', async () => {
+    NG.store.reset(); NG.store.setName('测试');
+    host.innerHTML = '';
+    let exited = false;
+    NG.session.start(NG.byId('count'), host, { onExit: () => { exited = true; } });
+    for (let r = 0; r < 5; r++) {
+      await tick(100);
+      const st = host.querySelector('.stage'), q = cap.q;
+      const idx = await drivers.count(q, st);
+      const row = st.querySelector('.choices');
+      if (!row) throw new Error('第 ' + (r + 1) + ' 题没有选择按钮');
+      click(row.children[idx]);
+      await tick(2200);
+    }
+    if (!host.querySelector('.summary')) throw new Error('没有结算页');
+    const d = NG.store.get();
+    if (d.stats.count.rounds !== 5 || d.stats.count.ok !== 5) throw new Error('统计不对 ' + JSON.stringify(d.stats.count));
+    if (d.stars !== 5 || d.stickers.length !== 1) throw new Error('应得 5 星和 1 张贴纸 ' + d.stars + '/' + d.stickers.length);
+    if (NG.store.getLevel('count') !== 2) throw new Error('连续 3 次答对应升到 2 级');
+    if (!host.querySelector('.newsticker')) throw new Error('结算页应显示新贴纸');
+    click(Array.prototype.find.call(host.querySelectorAll('button'), b => b.textContent === '回小镇'));
+    if (!exited) throw new Error('回小镇应触发 onExit');
+  });
+  await check('真实会话：答错两次后自动演示并进入下一题', async () => {
+    NG.store.reset(); NG.store.setName('测试');
+    host.innerHTML = '';
+    NG.session.start(NG.byId('count'), host, {});
+    await tick(100);
+    let st = host.querySelector('.stage'), q = cap.q;
+    const idx = await drivers.count(q, st);
+    const btns = Array.prototype.slice.call(st.querySelector('.choices').children).filter((_, i) => i !== idx);
+    click(btns[0]); click(btns[1]);
+    await tick(3300);
+    const d = NG.store.get();
+    if (d.stats.count.rounds !== 1 || d.stats.count.ok !== 0) throw new Error('应记 1 题 0 对 ' + JSON.stringify(d.stats.count));
+    if (host.querySelectorAll('.pdot.miss').length !== 1) throw new Error('进度点应标记为未一次答对');
+  });
+  await check('真实会话：休息提醒', async () => {
+    NG.store.reset(); NG.store.setName('测试'); NG.store.setSetting('restMin', 1); NG.store.addSeconds(120);
+    host.innerHTML = '';
+    NG.session.start(NG.byId('count'), host, {});
+    for (let r = 0; r < 5; r++) {
+      await tick(100);
+      const st = host.querySelector('.stage'), q = cap.q;
+      const idx = await drivers.count(q, st);
+      click(st.querySelector('.choices').children[idx]);
+      await tick(2200);
+    }
+    if (!host.querySelector('.restcard')) throw new Error('应显示休息提示');
+    if (Array.prototype.some.call(host.querySelectorAll('button'), b => b.textContent === '再玩一次')) throw new Error('休息时不应再显示“再玩一次”');
+    NG.store.reset();
+  });
+
+  errors.forEach(e => { fails++; out.push('ERROR ' + e); });
+  Object.keys(overflow).forEach(k => { fails++; out.push('LAYOUT 横向溢出 ' + k + ' 超出 ' + overflow[k]); });
+  out.push('模拟屏幕宽度 ' + Math.round(host.getBoundingClientRect().width) + 'px');
+  out.push((fails ? 'FAILED ' + fails : 'ALL OK') + '  (passes ' + passes + ')');
+  document.getElementById('out').textContent = out.join('\n');
+})().catch(e => { document.getElementById('out').textContent = 'CRASH ' + (e && e.stack || e); });
+</script>
+</body></html>
