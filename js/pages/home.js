@@ -1,4 +1,4 @@
-/* 首页（方块小镇地图）、贴纸册、欢迎页。 */
+/* 首页（数字小镇地图）、贴纸册、欢迎页。 */
 (function (root) {
   'use strict';
   const NG = root.NG, L = NG.logic, h = NG.ui.h;
@@ -47,7 +47,7 @@
 
     rootEl.appendChild(h('div', { class: 'screen welcome' },
       h('div', { class: 'logo', html: NG.blocks.stack(3, { unit: 40 }) + NG.blocks.stack(5, { unit: 40 }) + NG.blocks.stack(7, { unit: 40 }) }),
-      h('h1', null, '方块小镇'),
+      h('h1', null, '数字小镇'),
       h('p', null, '数字小人在等你！你叫什么名字呀？'),
       input,
       h('button', { class: 'btn primary big', type: 'button', onClick: start }, '开始玩'),
