@@ -5,35 +5,41 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#4dabf7">
 <title>数字小镇 · 数学小游戏</title>
-<link rel="stylesheet" href="css/style.css?v=4">
+<link rel="stylesheet" href="css/style.css?v=5">
 </head>
 <body>
 <div id="app"></div>
-<script src="js/core/logic.js?v=4"></script>
-<script src="js/core/store.js?v=4"></script>
-<script src="js/core/sync.js?v=4"></script>
-<script src="js/core/voicemap.js?v=4"></script>
-<script src="js/core/audio.js?v=4"></script>
-<script src="js/core/blocks.js?v=4"></script>
-<script src="js/core/ui.js?v=4"></script>
-<script src="js/core/session.js?v=4"></script>
-<script src="js/games/registry.js?v=4"></script>
-<script src="js/games/count.js?v=4"></script>
-<script src="js/games/subitize.js?v=4"></script>
-<script src="js/games/match.js?v=4"></script>
-<script src="js/games/trace.js?v=4"></script>
-<script src="js/games/merge.js?v=4"></script>
-<script src="js/games/bus.js?v=4"></script>
-<script src="js/games/balance.js?v=4"></script>
-<script src="js/games/split.js?v=4"></script>
-<script src="js/games/tenframe.js?v=4"></script>
-<script src="js/games/shop.js?v=4"></script>
-<script src="js/games/frog.js?v=4"></script>
-<script src="js/games/equation.js?v=4"></script>
-<script src="js/games/fruit.js?v=4"></script>
-<script src="js/games/challenge.js?v=4"></script>
-<script src="js/pages/home.js?v=4"></script>
-<script src="js/pages/parent.js?v=4"></script>
-<script src="js/app.js?v=4"></script>
+<script src="js/core/logic.js?v=5"></script>
+<script src="js/core/store.js?v=5"></script>
+<script src="js/core/sync.js?v=5"></script>
+<script src="js/core/voicemap.js?v=5"></script>
+<script src="js/core/audio.js?v=5"></script>
+<script src="js/core/blocks.js?v=5"></script>
+<script src="js/core/ui.js?v=5"></script>
+<script src="js/core/session.js?v=5"></script>
+<script src="js/games/registry.js?v=5"></script>
+<script src="js/games/count.js?v=5"></script>
+<script src="js/games/subitize.js?v=5"></script>
+<script src="js/games/match.js?v=5"></script>
+<script src="js/games/trace.js?v=5"></script>
+<script src="js/games/merge.js?v=5"></script>
+<script src="js/games/bus.js?v=5"></script>
+<script src="js/games/balance.js?v=5"></script>
+<script src="js/games/split.js?v=5"></script>
+<script src="js/games/tenframe.js?v=5"></script>
+<script src="js/games/shop.js?v=5"></script>
+<script src="js/games/frog.js?v=5"></script>
+<script src="js/games/equation.js?v=5"></script>
+<script src="js/games/fruit.js?v=5"></script>
+<script src="js/games/challenge.js?v=5"></script>
+<script src="js/pages/home.js?v=5"></script>
+<script src="js/pages/parent.js?v=5"></script>
+<script src="js/app.js?v=5"></script>
+<script>
+// 语音缓存：听过的台词下次打开不用再等网络（只在 https 下启用；不支持的浏览器自动忽略）
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+}
+</script>
 </body>
 </html>

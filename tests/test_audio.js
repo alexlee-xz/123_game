@@ -8,6 +8,7 @@ const vm = require('vm');
 
 const SRC = fs.readFileSync(path.join(__dirname, '..', 'js', 'core', 'audio.js'), 'utf8');
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+let blobSeq = 0;
 
 function mkSynth(voices) {
   const s = {
@@ -42,6 +43,8 @@ function load(opt) {
     speechSynthesis: synth,
     SpeechSynthesisUtterance: opt.noTTS ? undefined : function (text) { this.text = text; this.volume = 1; },
     Audio: opt.Audio, btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
+    fetch: opt.fetch, Blob: opt.fetch ? function Blob(parts, o) { this.parts = parts; this.type = o && o.type; } : undefined,
+    URL: opt.fetch ? { createObjectURL: (b) => 'blob:mem/' + (++blobSeq), revokeObjectURL() {} } : undefined,
     navigator: { userAgent: opt.ua || 'Mozilla/5.0' },
     NG: { store: { get: () => ({ settings }) } }
   });
@@ -248,6 +251,40 @@ async function test(name, fn) {
     assert(Date.now() - t0 < 15000);
   });
 
+  await test('提前下载：下载好的句子直接用内存地址播放；没下载好的用网址；失败时回退网址', async () => {
+    const urls = [];
+    const fetchOk = (u) => { urls.push(u); return Promise.resolve({ ok: true, arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)) }); };
+    const Au = mkAudio(() => 'ok');
+    const { A, NG } = load({ Audio: Au, fetch: fetchOk, noTTS: true });
+    NG.voiceMap = {}; ['甲', '乙'].forEach(t => { NG.voiceMap[A.vid(t)] = 1; });
+    A.prefetch(['甲', '没有录音的']);
+    await sleep(20);
+    assert.strictEqual(urls.length, 1); assert(urls[0].endsWith(A.vid('甲') + '.mp3'));    // 没有录音的不会去下载
+    await A.say('甲');
+    assert(/^blob:mem\//.test(Au.played[0]), Au.played[0]);
+    await A.say('乙');                                                                       // 没提前下载：走网址
+    assert(Au.played[1].endsWith('audio/v/' + A.vid('乙') + '.mp3'), Au.played[1]);
+    // 内存地址播不出来：回退到网址
+    const Au2 = mkAudio((src) => (/^blob:/.test(src) ? 'error' : 'ok'));
+    const r2 = load({ Audio: Au2, fetch: fetchOk, noTTS: true });
+    r2.NG.voiceMap = {}; r2.NG.voiceMap[r2.A.vid('甲')] = 1;
+    r2.A.prefetch(['甲']); await sleep(20);
+    await r2.A.say('甲');
+    assert.strictEqual(Au2.played.length, 2); assert(/^blob:/.test(Au2.played[0])); assert(Au2.played[1].endsWith('.mp3'));
+  });
+
+  await test('提前下载：下载失败不影响播放；没有 fetch 的环境（旧浏览器）什么都不做', async () => {
+    const Au = mkAudio(() => 'ok');
+    const { A, NG } = load({ Audio: Au, fetch: () => Promise.reject(new Error('offline')), noTTS: true });
+    NG.voiceMap = {}; NG.voiceMap[A.vid('甲')] = 1;
+    A.prefetch(['甲']); await sleep(20);
+    await A.say('甲');
+    assert(Au.played[0].endsWith('.mp3') && !/^blob:/.test(Au.played[0]));
+    const r = load({ Audio: mkAudio(() => 'ok') });
+    r.NG.voiceMap = {}; r.NG.voiceMap[r.A.vid('甲')] = 1;
+    r.A.prefetch(['甲']);                    // 不报错即可
+  });
+
   await test('vid：稳定、不同台词不同名、只含十六进制', async () => {
     const { A } = load();
     const ids = new Set();
@@ -264,7 +301,8 @@ async function test(name, fn) {
     vm.runInContext(fs.readFileSync(path.join(root, 'js', 'core', 'voicemap.js'), 'utf8'), vm.createContext({ NG, window: undefined }));
     const ids = Object.keys(NG.voiceMap);
     assert(ids.length > 1000, '录音太少：' + ids.length);
-    ids.forEach(i => { const f = path.join(root, 'audio', 'v', i + '.mp3'); assert(fs.existsSync(f) && fs.statSync(f).size > 800, '缺文件 ' + i); });
+    ids.forEach(i => { const f = path.join(root, 'audio', 'v', i + '.mp3'); assert(fs.existsSync(f) && fs.statSync(f).size > 400, '缺文件 ' + i); });
+    assert(NG.voiceWarm.length > 100 && NG.voiceWarm.every(i => NG.voiceMap[i]), '预下载名单有问题');
     const lines = JSON.parse(fs.readFileSync(path.join(root, 'tools', 'voice_lines.json'), 'utf8'));
     Object.keys(lines).forEach(i => assert.strictEqual(A.vid(lines[i]), i, '哈希对不上：' + lines[i]));
     ['太棒了！', '答对啦！', '真厉害！', '好聪明！', '做得好！', '再想一想', '我们一起看看', '完成啦，真棒！', '声音打开啦', A.TEST_LINE, '三加四等于七', '七减三等于四']

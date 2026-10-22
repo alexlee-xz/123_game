@@ -138,6 +138,54 @@
   const bust = (u) => u + (u.indexOf('?') < 0 ? '?' : '&') + 'r=' + Date.now();
   const onlineUrl = (text) => 'https://fanyi.baidu.com/gettts?lan=zh&spd=5&source=web&text=' + encodeURIComponent(text);
 
+  /* ---------- 提前下载（让声音“马上”出来） ----------
+   * 慢的不是播放，而是第一次从网上取 mp3（每句一次往返）。所以页面打开后，在后台把常用的短句
+   * （数字、夸奖等，NG.voiceWarm）先下载好放在内存里，播放时用内存里的地址，几乎没有延迟。
+   * 没有 fetch / Blob（或开了“省流量”）时什么也不做，照常按需下载。 */
+  const blobs = new Map();                 // id → { url, p }
+  const MAX_BLOBS = 500;
+  const canPrefetch = () => {
+    try {
+      if (root.navigator && root.navigator.connection && root.navigator.connection.saveData) return false;
+      return typeof root.fetch === 'function' && typeof root.Blob === 'function' && !!(root.URL && root.URL.createObjectURL);
+    } catch (e) { return false; }
+  };
+  function prefetchId(id) {
+    if (!hasClip(id) || !canPrefetch()) return Promise.resolve('');
+    let e = blobs.get(id);
+    if (e) return e.p;
+    e = { url: '', p: null };
+    e.p = root.fetch(CLIP_DIR + id + '.mp3')
+      .then(r => { if (!r.ok) throw new Error('http ' + r.status); return r.arrayBuffer(); })
+      .then(buf => {
+        e.url = root.URL.createObjectURL(new root.Blob([buf], { type: 'audio/mpeg' }));
+        if (blobs.size > MAX_BLOBS) {      // 太多时丢掉最早的
+          const k = blobs.keys().next().value;
+          const old = blobs.get(k); blobs.delete(k);
+          try { if (old && old.url) root.URL.revokeObjectURL(old.url); } catch (x) { /* ignore */ }
+        }
+        return e.url;
+      })
+      .catch(() => { blobs.delete(id); return ''; });
+    blobs.set(id, e);
+    return e.p;
+  }
+  // 同时最多 2 个下载，免得和正在进行的游戏抢网速
+  function prefetchIds(ids) {
+    const q = ids.filter(id => !blobs.has(id)); let active = 0;
+    const pump = () => {
+      while (active < 2 && q.length) { active++; prefetchId(q.shift()).then(() => { active--; pump(); }); }
+    };
+    pump();
+  }
+  const prefetch = (texts) => prefetchIds((texts || []).map(t => vid(t)));
+  const readyUrl = (id) => { const e = blobs.get(id); return e && e.url ? e.url : ''; };
+  let warmed = false;
+  function warmUp() {
+    if (warmed) return; warmed = true;
+    try { prefetchIds((NG.voiceWarm || []).slice()); } catch (e) { /* ignore */ }
+  }
+
   /* ---------- 浏览器朗读（备用） ---------- */
   const synth = () => root.speechSynthesis;
   function hasTTS() { return !!(root.speechSynthesis && root.SpeechSynthesisUtterance); }
@@ -200,7 +248,9 @@
       lastClip = id;
       try { if (hasTTS() && (synth().speaking || synth().pending)) { synth().cancel(); lastCancelAt = Date.now(); } } catch (e) { /* ignore */ }
       return (async () => {
-        let r = await playUrl(clip, my);
+        const mem = readyUrl(id);                                                    // 已提前下载好的，直接用内存里的
+        let r = await playUrl(mem || clip, my);
+        if (r === 'fail' && mem && my === gen) r = await playUrl(clip, my);         // 内存地址不行就走网址
         if (r === 'fail' && my === gen) r = await playUrl(bust(clip), my);          // 加载失败：再来一次
         if ((r === 'fail' || r === 'blocked') && my === gen) {
           lastError = 'clip-' + r;
@@ -265,5 +315,12 @@
     }, false);
   }
 
-  NG.audio = { say, cancel, sfx, unlock, status, test, isMuted, vid, TEST_LINE };
+  NG.audio = { say, cancel, sfx, unlock, status, test, isMuted, vid, prefetch, TEST_LINE };
+
+  // 页面加载完一会儿后，在后台下载常用短句
+  if (root.document && root.window === root) {
+    const go = () => setTimeout(warmUp, 800);
+    if (root.document.readyState === 'complete') go();
+    else if (root.addEventListener) root.addEventListener('load', go);
+  }
 })(typeof window !== 'undefined' ? window : globalThis);
