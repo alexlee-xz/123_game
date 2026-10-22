@@ -117,13 +117,113 @@ test('出题器不变量（每级 400 次）', () => {
       q = L.genTrace(level, rnd);
       assert(/^\d+$/.test(q.text) && q.text.split('').every(ch => L.digitStrokes(ch)));
       assert.strictEqual(q.mode, level <= 2 ? 'guide' : 'dictate');
+
+      q = L.genFrog(level, rnd);
+      assert(q.start >= 0 && q.end >= 0 && q.start <= q.max && q.end <= q.max && q.k >= 1);
+      assert.strictEqual(q.end, q.op === 'add' ? q.start + q.k : q.start - q.k);
+      assert.strictEqual(q.answer, q.kind === 'land' ? q.end : q.k);
+      assert(q.options.includes(q.answer) && distinct(q.options));
+      assert.strictEqual(q.max, [5, 10, 10, 20][level - 1]);
+      if (level === 1) assert.strictEqual(q.op, 'add');
+      if (level === 2) assert.strictEqual(q.op, 'sub');
+      if (level < 4) assert.strictEqual(q.kind, 'land');
+
+      q = L.genEquation(level, rnd);
+      assert(q.options.length === 3 && q.options.includes(q.answer) && distinct(q.options));
+      assert(q.text.length > 0 && q.full.length > 0);
+      if (level === 1) assert.strictEqual(q.mode, 'picture');
+      if (q.mode === 'picture') {
+        assert.strictEqual(q.answer, q.a + (q.op === 'add' ? ' + ' : ' - ') + q.b + ' = ' + q.c);
+        assert.strictEqual(q.op === 'add' ? q.a + q.b : q.a - q.b, q.c);
+        assert(q.c >= 1 && q.a <= [5, 7, 10, 10][level - 1]);
+        // 选项都不相同；错的选项不能恰好是同一个算式
+        q.options.forEach(s => assert(/^\d+ [+-] \d+ = \d+$/.test(s)));
+      } else if (q.mode === 'blank') {
+        assert(/□/.test(q.text) && !/□/.test(q.full));
+        const m = q.full.match(/^(\d+) ([+-]) (\d+) = (\d+)$/);
+        assert(m, q.full);
+        assert.strictEqual(m[2] === '+' ? +m[1] + +m[3] : +m[1] - +m[3], +m[4]);
+        assert(q.answer >= 1 && q.answer <= [5, 7, 10, 10][level - 1]);
+      } else if (q.mode === 'compare') {
+        assert(level >= 3);
+        assert.strictEqual(q.answer, q.val > q.n ? '>' : q.val < q.n ? '<' : '=');
+        assert.deepStrictEqual(q.options.slice().sort(), ['<', '=', '>']);
+      } else {
+        assert.strictEqual(q.mode, 'swap');
+        assert(level === 4 && q.a !== q.b && q.a + q.b <= 10);
+      }
+
+      q = L.genFruit(level, rnd);
+      if (level === 1) {
+        assert.strictEqual(q.mode, 'choose');
+        assert.strictEqual(q.lines.length, 3);
+        const mins = q.lines.map(ln => L.cutAreas(q.shape, [ln])).map(f => f[f.length - 1]);
+        mins.forEach((m, i) => { if (i === q.answerIndex) assert(m > 0.47, '公平的那个应该是一半一半 ' + m); else assert(m < 0.36, '不公平的要明显不一样大 ' + m); });
+      } else {
+        assert.strictEqual(q.mode, 'cut');
+        assert.strictEqual(q.pieces, level === 4 ? 4 : 2);
+        assert.strictEqual(q.guide, level === 2);
+        assert.strictEqual(q.ideal.length, q.pieces === 4 ? 2 : 1);
+        assert(L.judgeCut(q.shape, q.ideal, q.pieces).ok);
+      }
     }
   }
 });
 
 test('挑战关：每一级都只会选已定义的游戏', () => {
-  const ids = ['match', 'merge', 'take', 'bus', 'split', 'tenframe', 'balance', 'shop'];
+  const ids = ['match', 'merge', 'take', 'bus', 'split', 'tenframe', 'balance', 'shop', 'frog', 'equation'];
   for (let level = 1; level <= 4; level++) for (let i = 0; i < 100; i++) assert(ids.includes(L.pickChallenge(level, rnd)));
+});
+
+test('切水果：面积占比（圆、方形，切一刀、切两刀）', () => {
+  [L.CUT_SHAPES.circle, L.CUT_SHAPES.rect].forEach(shape => {
+    [0, 30, 45, 90, 135].forEach(a => {
+      const f = L.cutAreas(shape, [L.lineAt(a, 0)]);
+      assert.strictEqual(f.length, 2);
+      assert(Math.abs(f[0] - 0.5) < 0.02 && Math.abs(f[1] - 0.5) < 0.02, shape.type + ' ' + a + ' ' + f);
+      assert(Math.abs(f[0] + f[1] - 1) < 1e-9);
+    });
+    [0, 45].forEach(a => {
+      const f = L.cutAreas(shape, [L.lineAt(a, 0), L.lineAt(a + 90, 0)]);
+      assert.strictEqual(f.length, 4);
+      f.forEach(x => assert(Math.abs(x - 0.25) < 0.02, shape.type + ' ' + f));
+    });
+    assert.strictEqual(L.cutAreas(shape, [L.lineAt(0, 200)]).length, 1);            // 完全没碰到水果
+  });
+  // 圆形偏移 d 的小块面积有公式可对照：r^2 (acos(d/r) - (d/r) sqrt(1-(d/r)^2)) / (pi r^2)
+  const c = L.CUT_SHAPES.circle;
+  [10, 30, 50].forEach(d => {
+    const t = d / c.r, want = (Math.acos(t) - t * Math.sqrt(1 - t * t)) / Math.PI;
+    const f = L.cutAreas(c, [L.lineAt(0, d)]);
+    assert(Math.abs(f[1] - want) < 0.01, d + ' ' + f[1] + ' vs ' + want);
+  });
+});
+
+test('切水果：判定（小偏差算对，明显偏了不算，没切开不算）', () => {
+  [L.CUT_SHAPES.circle, L.CUT_SHAPES.rect].forEach(shape => {
+    [0, 45, 90, 135].forEach(a => {
+      [-6, 0, 6].forEach(d => assert(L.judgeCut(shape, [L.lineAt(a, d)], 2).ok, shape.type + ' ' + a + ' ' + d));
+      [-30, 30, 45].forEach(d => {
+        const j = L.judgeCut(shape, [L.lineAt(a, d)], 2);
+        assert(!j.ok && j.reason === 'uneven', shape.type + ' ' + a + ' ' + d);
+      });
+    });
+    assert(L.judgeCut(shape, [L.lineAt(0, 200)], 2).reason === 'miss');
+    // 两刀：十字对齐算对；一刀只能分两块；十字中心偏 30 或夹角不是直角都不算
+    assert(L.judgeCut(shape, [L.lineAt(0, 5), L.lineAt(90, -5)], 4).ok);
+    assert.strictEqual(L.judgeCut(shape, [L.lineAt(0, 0)], 4).reason, 'miss');
+    assert.strictEqual(L.judgeCut(shape, [L.lineAt(0, 30), L.lineAt(90, 30)], 4).reason, 'uneven');
+    assert.strictEqual(L.judgeCut(shape, [L.lineAt(0, 0), L.lineAt(60, 0)], 4).reason, 'uneven');
+    assert.strictEqual(L.judgeCut(shape, [L.lineAt(0, 0), L.lineAt(0, 20)], 4).reason, 'miss');   // 两刀平行只有 3 块
+  });
+});
+
+test('切水果：刀要从水果外面划过去（两端在外面且穿过）', () => {
+  const c = L.CUT_SHAPES.circle;
+  assert(L.knifeCrossesShape(c, [100, -20], [100, 220]));
+  assert(!L.knifeCrossesShape(c, [100, 100], [100, 220]));       // 起点在里面
+  assert(!L.knifeCrossesShape(c, [-20, 0], [-20, 200]));         // 完全在水果外面
+  assert(!L.knifeCrossesShape(c, [20, 20], [30, 30]));           // 在外面的短线
 });
 
 test('硬币：1~10 元都能凑，且用最少枚数', () => {
@@ -207,6 +307,123 @@ test('描红：多笔画必须按顺序（4 先斜折后竖）', () => {
   const c = new L.TraceChecker(lay.strokes, { tol: 18 });
   assert.strictEqual(c.begin(lay.strokes[1].pts[0]), false);    // 想先写竖
   assert.strictEqual(trace(c, lay.strokes), 'done');
+});
+
+/* ----- 描红：“写得很偏”不能通过；轨道模式会把人引回轨道 ----- */
+// 沿着笔画走一遍。side：沿法线方向偏离轨道多少（正负表示两侧，起笔点保持在起点）；amp/wave：蛇形摆动；返回 end() 的结果
+function walkStroke(checker, s, o) {
+  o = o || {};
+  const d = L.densify(s.pts, o.step || 4), shift = o.shift || [0, 0], amp = o.amp || 0, wave = o.wave || 40, side = o.side || 0;
+  assert(checker.begin(d[0]), '起笔点应被接受');
+  const states = [];
+  for (let i = 1; i < d.length; i++) {
+    const a = d[i - 1], b = d[i], nx = -(b[1] - a[1]), ny = b[0] - a[0], nl = Math.hypot(nx, ny) || 1;
+    const w = side + amp * Math.sin(i * (o.step || 4) / wave * Math.PI * 2);
+    states.push(checker.move([b[0] + shift[0] + nx / nl * w, b[1] + shift[1] + ny / nl * w]));
+  }
+  return { end: checker.end(), states };
+}
+const LEVEL_OPTS = [1, 2, 3, 4].map(l => { const q = L.genTrace(l, L.mulberry32(5)); return { tol: q.tol, rail: q.rail, minAcc: q.minAcc, maxStrays: q.maxStrays }; });
+
+test('描红：每一级的标准参数下，标准笔顺、抖动 ±6、快速描写都能完成', () => {
+  LEVEL_OPTS.forEach((opt, li) => allTexts.forEach(t => {
+    const lay = L.layoutText(t);
+    assert.strictEqual(trace(new L.TraceChecker(lay.strokes, opt), lay.strokes), 'done', 'L' + (li + 1) + ' ' + t);
+    assert.strictEqual(trace(new L.TraceChecker(lay.strokes, opt), lay.strokes, { noise: 6 }), 'done', 'L' + (li + 1) + ' 抖动 ' + t);
+    assert.strictEqual(trace(new L.TraceChecker(lay.strokes, opt), lay.strokes, { step: 20 }), 'done', 'L' + (li + 1) + ' 快速 ' + t);
+  }));
+});
+
+test('描红：整条路径偏离轨道 20 个单位（约字高的 1/7）不算写对，偏 6 个单位仍然算', () => {
+  LEVEL_OPTS.forEach((opt, li) => '0123456789'.split('').forEach(ch => {
+    const lay = L.layoutText(ch);
+    [20, -20, 24, -24].forEach(side => {
+      const c = new L.TraceChecker(lay.strokes, opt);
+      const r = walkStroke(c, lay.strokes[0], { side });
+      assert.strictEqual(r.end, 'retry', 'L' + (li + 1) + ' ' + ch + ' 偏移 ' + side);
+      assert.strictEqual(c.report.reason, 'wobbly');
+    });
+    [6, -6].forEach(side => {
+      const c2 = new L.TraceChecker(lay.strokes, opt);
+      assert.notStrictEqual(walkStroke(c2, lay.strokes[0], { side }).end, 'retry', 'L' + (li + 1) + ' ' + ch + ' 偏 ' + side + ' 应通过');
+    });
+  }));
+});
+
+test('描红：蛇形乱晃（幅度 18）不算，轻微晃动（幅度 5）算', () => {
+  [2, 3].forEach(li => '0123456789'.split('').forEach(ch => {
+    const lay = L.layoutText(ch), opt = LEVEL_OPTS[li];
+    assert.strictEqual(walkStroke(new L.TraceChecker(lay.strokes, opt), lay.strokes[0], { amp: 18, wave: 30 }).end, 'retry', 'L' + (li + 1) + ' ' + ch + ' 乱晃');
+    assert.notStrictEqual(walkStroke(new L.TraceChecker(lay.strokes, opt), lay.strokes[0], { amp: 5, wave: 30 }).end, 'retry', 'L' + (li + 1) + ' ' + ch + ' 轻晃');
+  }));
+});
+
+test('描红：采样稀疏时抄近路（直线穿过弯曲的中间）不算', () => {
+  '0689'.split('').forEach(ch => {
+    const lay = L.layoutText(ch), s = lay.strokes[0], d = L.densify(s.pts, 4);
+    [2, 3].forEach(li => {
+      const c = new L.TraceChecker(lay.strokes, LEVEL_OPTS[li]);
+      assert(c.begin(d[0]));
+      for (let i = 1; i < Math.floor(d.length * 0.25); i++) c.move(d[i]);
+      c.move(d[Math.floor(d.length * 0.75)]);                  // 一下跳到后面
+      for (let i = Math.floor(d.length * 0.75) + 1; i < d.length; i++) c.move(d[i]);
+      assert.strictEqual(c.end(), 'retry', 'L' + (li + 1) + ' ' + ch + ' 跳过中间');
+    });
+  });
+});
+
+test('描红：不成功时说明原因（没写完 / 偏出轨道）', () => {
+  const lay = L.layoutText('2');
+  let c = new L.TraceChecker(lay.strokes, LEVEL_OPTS[2]);
+  const d = L.densify(lay.strokes[0].pts, 4);
+  c.begin(d[0]); for (let i = 1; i < d.length / 2; i++) c.move(d[i]);
+  assert.strictEqual(c.end(), 'retry'); assert.strictEqual(c.report.reason, 'short');       // 贴着轨道但抬笔太早
+  c = new L.TraceChecker(lay.strokes, LEVEL_OPTS[2]);
+  assert.strictEqual(walkStroke(c, lay.strokes[0], { side: 22 }).end, 'retry'); assert.strictEqual(c.report.reason, 'wobbly');
+});
+
+test('描红·轨道模式：走出轨道时进度停住并返回 off，回到轨道返回 back，回位圈放在最后一个在轨道上的位置', () => {
+  const lay = L.layoutText('7'), s = lay.strokes[0], d = L.densify(s.pts, 4);
+  const c = new L.TraceChecker(lay.strokes, LEVEL_OPTS[0]);
+  assert(c.begin(d[0]));
+  let i = 1;
+  for (; i < 20; i++) assert.strictEqual(c.move(d[i]), 'on');
+  const pAt = c.p, anchor0 = c.anchor.slice();
+  // 走偏 40 个单位，持续 10 个点。刚离开轨道的头几步仍然贴着轨道，进度可以前进一点点；一旦 off，进度就必须停住
+  let sawOff = 0, pOff = -1, anchorOff = null;
+  for (let k = 0; k < 10; k++) {
+    const r = c.move([d[i][0] + 40, d[i][1] + 40]);
+    if (r === 'off') { sawOff++; if (pOff < 0) { pOff = c.p; anchorOff = c.anchor.slice(); } }
+  }
+  assert(sawOff >= 9, '应连续 off');
+  assert(pOff >= pAt && pOff - pAt <= 5, '离开轨道时进度不应跳变 ' + pAt + ' -> ' + pOff);
+  assert.strictEqual(c.p, pOff, '走偏之后进度不能再前进');
+  assert.deepStrictEqual(c.anchor, anchorOff);
+  assert(Math.hypot(c.anchor[0] - anchor0[0], c.anchor[1] - anchor0[1]) <= 25);
+  assert.strictEqual(c.strays, 1);
+  // 回到轨道（在锚点附近）
+  assert.strictEqual(c.move(c.anchor), 'back');
+  for (let j = c.p; j < d.length; j++) c.move(d[j]);
+  assert.strictEqual(c.end(), 'done');      // “7”只有一笔
+});
+
+test('描红·轨道模式：走偏后在“前方很远处”回到轨道（抄近路）不算继续', () => {
+  const lay = L.layoutText('0'), d = L.densify(lay.strokes[0].pts, 4);
+  const c = new L.TraceChecker(lay.strokes, LEVEL_OPTS[0]);
+  c.begin(d[0]);
+  for (let i = 1; i < 10; i++) c.move(d[i]);
+  const p0 = c.p;
+  assert.strictEqual(c.move(d[Math.floor(d.length / 2)]), 'off');   // 一下子跳到椭圆另一边
+  assert(c.p < p0 + 8 && c.p < d.length / 4, '不能靠跳跃推进进度：' + p0 + ' -> ' + c.p + ' / ' + d.length);
+});
+
+test('描红：genTrace 的轨道参数', () => {
+  for (let level = 1; level <= 4; level++) {
+    const q = L.genTrace(level, L.mulberry32(level));
+    assert(q.tol >= 12 && q.tol <= 16, 'tol ' + q.tol);               // 以前是 17~20
+    assert.strictEqual(q.rail, level <= 2);
+    assert(q.minAcc > 0 && q.minAcc < 1);
+  }
 });
 
 test('描红：两位数的布局', () => {

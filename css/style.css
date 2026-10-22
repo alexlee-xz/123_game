@@ -168,9 +168,13 @@ svg.blk, svg.dots, svg.fingers { max-width: 100%; height: auto; }
 .tracepad { width: 100%; max-width: 420px; background: #fff; border-radius: 24px; box-shadow: var(--shadow); touch-action: none; }
 .tracepad .box { fill: #fffdf5; stroke: #f08c00; stroke-width: 2; stroke-dasharray: 8 6; }
 .tracepad .mid { stroke: #ffd8a8; stroke-width: 1.5; stroke-dasharray: 5 5; }
-.tracepad .guide path { fill: none; stroke: #ced4da; stroke-width: 18; stroke-linecap: round; stroke-linejoin: round; transition: opacity .3s; }
+.tracepad .guide path { fill: none; stroke: #ced4da; stroke-width: 24; stroke-linecap: round; stroke-linejoin: round; transition: opacity .3s, stroke .3s; }
+.tracepad .guide path.cur { stroke: #a5d8ff; }
+.tracepad .guide path.done { stroke: #e9ecef; }
 .tracepad .guide.answer path { stroke: #ffa94d; }
-.tracepad .ink { fill: none; stroke: #339af0; stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; }
+.tracepad .ink { fill: none; stroke: #339af0; stroke-width: 10; stroke-linecap: round; stroke-linejoin: round; }
+.tracepad .ink.offpath { stroke: #ff922b; }
+.tracepad .ring { fill: rgba(255, 212, 59, .35); stroke: #f08c00; stroke-width: 3; stroke-dasharray: 5 4; pointer-events: none; }
 .tracepad .ink.okstroke { stroke: #51cf66; }
 .tracepad .start { fill: #51cf66; stroke: #fff; stroke-width: 3; }
 .tracepad .ord { fill: #fff; font-size: 14px; font-weight: 800; }
@@ -221,3 +225,50 @@ svg.blk, svg.dots, svg.fingers { max-width: 100%; height: auto; }
 .restore { margin-top: 14px; max-width: 100%; }
 .restore summary { cursor: pointer; padding: 8px; }
 .card input[type=text] { max-width: 100%; box-sizing: border-box; }
+
+/* sound hint */
+.mutehint { margin: 6px auto; padding: 6px 12px; background: #fff3bf; border-radius: 14px; font-size: 16px; display: flex; gap: 10px; align-items: center; justify-content: center; }
+
+/* ---- 青蛙跳跳 / 算式工坊 / 切水果 ---- */
+.stagecard.s6 { border-color: #20c997; }
+.frogwrap { width: 100%; max-width: 440px; background: #e7f5ff; border-radius: 22px; box-shadow: var(--shadow); padding: 6px 4px 2px; }
+.numline { width: 100%; height: auto; display: block; overflow: visible; }
+.numline .axis { stroke: #495057; stroke-width: 4; stroke-linecap: round; }
+.numline .tick { stroke: #495057; stroke-width: 3; }
+.numline .tlabel { font-size: 17px; font-weight: 800; fill: #343a40; }
+.numline .tlabel.start { fill: #1971c2; font-size: 20px; }
+.numline .tlabel.qmark { fill: #f08c00; font-size: 22px; animation: pulse 1s infinite; }
+.numline .tlabel.got { fill: #2f9e44; font-size: 22px; }
+.numline .frog { font-size: 34px; }
+.numline .frog.hop { animation: frogHop .32s ease-out; }
+.numline .pole { stroke: #868e96; stroke-width: 3; }
+.numline .flag { font-size: 26px; }
+@keyframes frogHop { 0% { transform: translateY(0); } 50% { transform: translateY(-16px); } 100% { transform: translateY(0); } }
+.hopbtn { font-size: 26px; min-width: 190px; }
+
+.equation.big { font-size: 40px; min-height: 56px; }
+.equation .hole { display: inline-block; min-width: 1.1em; padding: 0 6px; border-radius: 12px; background: #fff3bf; border: 3px dashed #f08c00; color: #f08c00; }
+.equation .hole.round { border-radius: 50%; }
+.hintline { font-size: 18px; color: #495057; }
+.eqpic { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.eqpic .grp { display: flex; flex-wrap: wrap; gap: 4px; max-width: 200px; justify-content: center; background: #fff; border-radius: 18px; padding: 8px 10px; box-shadow: var(--shadow); }
+.eqpic .grp.b { background: #fff4e6; }
+.eqpic .em { font-size: 30px; line-height: 1.1; position: relative; }
+.eqpic .em.gone .ico { opacity: .3; filter: grayscale(1); }
+.eqpic .em .x { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 24px; color: #e03131; }
+.eqpic .eqmid { font-size: 34px; font-weight: 900; color: #868e96; }
+.eqopt { font-size: 30px; font-weight: 900; white-space: nowrap; color: #1971c2; }
+
+.fruitpad { width: 100%; max-width: 380px; border-radius: 24px; background: #fff9db; box-shadow: var(--shadow); touch-action: none; cursor: crosshair; }
+.fruitpad .platebg { fill: #fff; stroke: #e9ecef; stroke-width: 3; }
+.fruitpad .guideline { stroke: #228be6; stroke-width: 4; stroke-dasharray: 9 8; stroke-linecap: round; pointer-events: none; }
+.fruitpad .startdot { fill: #51cf66; stroke: #fff; stroke-width: 3; }
+.fruitpad .cutline { stroke: #fff; stroke-width: 5; stroke-linecap: round; pointer-events: none; }
+.fruitpad .knife { stroke: #495057; stroke-width: 5; stroke-linecap: round; stroke-dasharray: 2 9; pointer-events: none; }
+.fruitpad .piece { transition: transform .6s cubic-bezier(.2, 1.4, .4, 1); }
+.fruitopts { gap: 10px; }
+.fruitopts .choice { min-width: 0; min-height: 0; padding: 4px; }
+.fruitmini { width: 88px; height: 88px; display: block; }.numline.dense .tlabel { font-size: 28px; }
+.numline.dense .tlabel.start, .numline.dense .tlabel.qmark, .numline.dense .tlabel.got { font-size: 32px; }
+.numline.dense .frog { font-size: 54px; }
+.numline.dense .flag { font-size: 40px; }

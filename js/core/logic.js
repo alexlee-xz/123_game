@@ -260,12 +260,172 @@
     return q;
   };
 
+  // 青蛙跳跳：数轴上的加减（向前跳 = 加，向后跳 = 减）。kind = land（落在哪）或 steps（跳了几步）
+  L.genFrog = function (level, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    const max = [5, 10, 10, 20][l - 1];
+    const maxK = [3, 4, 5, 6][l - 1];
+    const op = l === 1 ? 'add' : l === 2 ? 'sub' : (rnd() < 0.5 ? 'add' : 'sub');
+    const kind = (l === 4 && rnd() < 0.4) ? 'steps' : 'land';
+    let start, k;
+    if (op === 'add') {
+      k = L.randInt(rnd, 1, maxK);
+      start = L.randInt(rnd, l === 1 ? 0 : 1, max - k);
+    } else {
+      start = L.randInt(rnd, 2, max);
+      k = L.randInt(rnd, 1, Math.min(maxK, start));
+    }
+    const end = op === 'add' ? start + k : start - k;
+    const answer = kind === 'land' ? end : k;
+    const opt = kind === 'land' ? { min: 0, max, count: 3 } : { min: 1, max: Math.min(max, maxK + 2), count: 3 };
+    return { op, kind, start, k, end, max, answer, options: L.makeOptions(rnd, answer, opt) };
+  };
+
+  // 算式工坊：看图选算式、填空缺的数、比大小、交换加数
+  L.genEquation = function (level, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    const max = [5, 7, 10, 10][l - 1];
+    const modes = l === 1 ? ['picture'] : l === 2 ? ['picture', 'blank'] :
+      l === 3 ? ['blank', 'compare', 'picture'] : ['blank', 'compare', 'swap', 'blank'];
+    const mode = L.pick(rnd, modes);
+    const SY = { add: ' + ', sub: ' - ' };
+    if (mode === 'picture') {
+      const op = l === 1 ? 'add' : L.pick(rnd, ['add', 'sub']);
+      let a, b, c;
+      if (op === 'add') { c = L.randInt(rnd, 2, max); a = L.randInt(rnd, 1, c - 1); b = c - a; }
+      else { a = L.randInt(rnd, 2, max); b = L.randInt(rnd, 1, a - 1); c = a - b; }
+      const eq = (x, o, y, r) => {
+        if (r === undefined) r = o === 'add' ? x + y : x - y;
+        return r < 0 || y < 1 ? null : x + SY[o] + y + ' = ' + r;
+      };
+      const answer = eq(a, op, b, c);
+      const other = op === 'add' ? 'sub' : 'add';
+      const cands = [eq(a, op, b, c + 1), eq(a, op, b, c - 1), eq(a, other, b), eq(a, op, b + 1), eq(a, op, b - 1)]
+        .filter((s, i, arr) => s && s !== answer && arr.indexOf(s) === i);
+      const wrong = L.shuffle(rnd, cands).slice(0, 2);
+      return {
+        mode, op, a, b, c, item: L.pick(rnd, L.COUNT_ITEMS), answer, text: answer, full: answer,
+        options: L.shuffle(rnd, wrong.concat([answer]))
+      };
+    }
+    if (mode === 'blank') {
+      const forms = l === 2 ? ['add_b'] : l === 3 ? ['add_b', 'add_a', 'sub_b'] : ['add_b', 'add_a', 'sub_b', 'sub_a'];
+      const form = L.pick(rnd, forms);
+      let a, b, c;
+      if (form.indexOf('add') === 0) { c = L.randInt(rnd, 2, max); a = L.randInt(rnd, 1, c - 1); b = c - a; }
+      else { a = L.randInt(rnd, 2, max); b = L.randInt(rnd, 1, a - 1); c = a - b; }
+      let text, answer;
+      if (form === 'add_b') { text = a + ' + □ = ' + c; answer = b; }
+      else if (form === 'add_a') { text = '□ + ' + b + ' = ' + c; answer = a; }
+      else if (form === 'sub_b') { text = a + ' - □ = ' + c; answer = b; }
+      else { text = '□ - ' + b + ' = ' + c; answer = a; }
+      return {
+        mode, form, a, b, c, text, answer, full: text.replace('□', String(answer)),
+        options: L.makeOptions(rnd, answer, { min: 1, max, count: 3 })
+      };
+    }
+    if (mode === 'compare') {
+      const op = L.pick(rnd, ['add', 'sub']);
+      let a, b;
+      if (op === 'add') { a = L.randInt(rnd, 1, max - 1); b = L.randInt(rnd, 1, max - a); }
+      else { a = L.randInt(rnd, 2, max); b = L.randInt(rnd, 1, a - 1); }
+      const val = op === 'add' ? a + b : a - b;
+      const n = Math.max(0, val + L.pick(rnd, [-2, -1, 0, 0, 1, 2]));
+      const answer = val > n ? '>' : val < n ? '<' : '=';
+      return {
+        mode, op, a, b, n, val, answer, text: a + SY[op] + b + ' ○ ' + n,
+        full: a + SY[op] + b + ' ' + answer + ' ' + n, options: L.shuffle(rnd, ['>', '<', '='])
+      };
+    }
+    // swap：3 + 4 = 4 + □（加法交换）
+    let a, b;
+    do { a = L.randInt(rnd, 1, 9); b = L.randInt(rnd, 1, 10 - a); } while (a === b);
+    return {
+      mode: 'swap', a, b, answer: a, text: a + ' + ' + b + ' = ' + b + ' + □',
+      full: a + ' + ' + b + ' = ' + b + ' + ' + a, options: L.makeOptions(rnd, a, { min: 1, max: 9, count: 3 })
+    };
+  };
+
+  /* ---------- 切水果：平均分（公平切分） ----------
+   * 水果画在 200 x 200 的格子里，中心 (100,100)。切一刀 = 一条直线；用网格采样算出每一块的面积占比。 */
+  L.CUT_SHAPES = {
+    circle: { type: 'circle', cx: 100, cy: 100, r: 70 },
+    rect: { type: 'rect', x: 30, y: 30, w: 140, h: 140 }
+  };
+  L.CUT_ITEMS = {
+    circle: [{ name: '西瓜', kind: 'melon' }, { name: '披萨', kind: 'pizza' }],
+    rect: [{ name: '蛋糕', kind: 'cake' }, { name: '巧克力', kind: 'choc' }]
+  };
+  L.inShape = function (s, x, y) {
+    if (s.type === 'circle') return (x - s.cx) * (x - s.cx) + (y - s.cy) * (y - s.cy) <= s.r * s.r;
+    return x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h;
+  };
+  // 过中心、偏移 offset 的一条长直线（两端都在水果外面）。angle 单位：度
+  L.lineAt = function (angle, offset) {
+    const a = angle * Math.PI / 180, ux = Math.cos(a), uy = Math.sin(a), nx = -uy, ny = ux;
+    const px = 100 + nx * (offset || 0), py = 100 + ny * (offset || 0), K = 130;
+    return { x1: px - ux * K, y1: py - uy * K, x2: px + ux * K, y2: py + uy * K };
+  };
+  // 每一块占整个水果的面积比例（从大到小）；占比不到 1% 的细条忽略
+  L.cutAreas = function (shape, lines, step) {
+    step = step || 2;
+    const bb = shape.type === 'circle'
+      ? { x0: shape.cx - shape.r, y0: shape.cy - shape.r, x1: shape.cx + shape.r, y1: shape.cy + shape.r }
+      : { x0: shape.x, y0: shape.y, x1: shape.x + shape.w, y1: shape.y + shape.h };
+    const counts = {}; let total = 0;
+    for (let y = bb.y0 + step * 0.37; y < bb.y1; y += step) {
+      for (let x = bb.x0 + step * 0.41; x < bb.x1; x += step) {
+        if (!L.inShape(shape, x, y)) continue;
+        let key = 0;
+        for (let i = 0; i < lines.length; i++) {
+          const ln = lines[i];
+          if ((ln.x2 - ln.x1) * (y - ln.y1) - (ln.y2 - ln.y1) * (x - ln.x1) > 0) key |= 1 << i;
+        }
+        counts[key] = (counts[key] || 0) + 1; total++;
+      }
+    }
+    return Object.keys(counts).map(k => counts[k] / total).filter(f => f >= 0.01).sort((a, b) => b - a);
+  };
+  L.CUT_MIN = { 2: 0.38, 4: 0.19 };     // 理想是 0.5 和 0.25；最小的一块不能比这个小
+  // 判断切法：pieces = 2（切一刀）或 4（切两刀）。reason: miss（没切开）/ uneven（切得不一样大）
+  L.judgeCut = function (shape, lines, pieces) {
+    const f = L.cutAreas(shape, lines);
+    if (f.length !== pieces) return { ok: false, reason: 'miss', fractions: f };
+    const ok = f[f.length - 1] >= L.CUT_MIN[pieces];
+    return { ok, reason: ok ? '' : 'uneven', fractions: f };
+  };
+  // 点 (x,y) 是否在线段上穿过了水果：两端都在水果外面，且线段确实穿过水果
+  L.knifeCrossesShape = function (shape, p0, p1) {
+    if (L.inShape(shape, p0[0], p0[1]) || L.inShape(shape, p1[0], p1[1])) return false;
+    const n = 40;
+    for (let i = 1; i < n; i++) {
+      const t = i / n;
+      if (L.inShape(shape, p0[0] + (p1[0] - p0[0]) * t, p0[1] + (p1[1] - p0[1]) * t)) return true;
+    }
+    return false;
+  };
+  // L1：选一选哪个切得一样大；L2：沿虚线切两半；L3：自己切两半；L4：切两刀分成四份
+  L.genFruit = function (level, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    const shapeKey = l === 2 ? 'circle' : L.pick(rnd, ['circle', 'rect']);
+    const shape = L.CUT_SHAPES[shapeKey], item = L.pick(rnd, L.CUT_ITEMS[shapeKey]);
+    if (l === 1) {
+      const angles = L.shuffle(rnd, [0, 45, 90, 135]).slice(0, 3);
+      const answerIndex = L.randInt(rnd, 0, 2);
+      const lines = angles.map((a, i) => L.lineAt(a, i === answerIndex ? 0 : L.pick(rnd, [-1, 1]) * L.randInt(rnd, 30, 46)));
+      return { mode: 'choose', pieces: 2, guide: false, shapeKey, shape, item, lines, answerIndex, options: [0, 1, 2] };
+    }
+    const a0 = L.pick(rnd, [0, 45, 90, 135]);
+    const ideal = l === 4 ? [L.lineAt(a0 % 90, 0), L.lineAt(a0 % 90 + 90, 0)] : [L.lineAt(a0, 0)];
+    return { mode: 'cut', pieces: l === 4 ? 4 : 2, guide: l === 2, shapeKey, shape, item, ideal };
+  };
+
   // 挑战关：按等级混合各类题目
   L.CHALLENGE_POOLS = [
     ['match', 'merge', 'take'],
     ['match', 'merge', 'take', 'bus', 'split'],
-    ['merge', 'take', 'bus', 'split', 'tenframe', 'balance'],
-    ['merge', 'take', 'bus', 'split', 'tenframe', 'balance', 'shop']
+    ['merge', 'take', 'bus', 'split', 'tenframe', 'balance', 'frog', 'equation'],
+    ['merge', 'take', 'bus', 'split', 'tenframe', 'balance', 'shop', 'frog', 'equation']
   ];
   L.pickChallenge = (level, rnd) => L.pick(rnd || Math.random, L.CHALLENGE_POOLS[lv(level) - 1]);
 
@@ -313,54 +473,112 @@
     }
     return out;
   };
+  /* 描红难度：
+   *  tol    轨道宽度（手指离笔画中线多远算“在轨道里”，单位同 100x140 的字格）
+   *  rail   轨道模式：手指走出轨道时墨迹停在原地、出现回位圈，回到圈里才继续写（手把手引导）
+   *  minAcc 一笔里至少要有这么多比例的路程走在轨道里，否则这一笔重写
+   *  maxStrays （仅非轨道模式）一笔里最多允许走出轨道几次，不让“左右乱晃”过关 */
   L.genTrace = function (level, rnd) {
     rnd = rnd || Math.random; const l = lv(level);
-    if (l === 1) return { text: L.pick(rnd, '12345'.split('')), mode: 'guide', bee: true, tol: 18 };
-    if (l === 2) return { text: L.pick(rnd, '0123456789'.split('')), mode: 'guide', bee: false, tol: 17 };
-    if (l === 3) return { text: L.pick(rnd, '0123456789'.split('')), mode: 'dictate', bee: false, tol: 20 };
-    return { text: String(L.randInt(rnd, 10, 20)), mode: 'dictate', bee: false, tol: 20 };
+    if (l === 1) return { text: L.pick(rnd, '12345'.split('')), mode: 'guide', bee: true, rail: true, tol: 15, minAcc: 0.5, maxStrays: Infinity };
+    if (l === 2) return { text: L.pick(rnd, '0123456789'.split('')), mode: 'guide', bee: false, rail: true, tol: 14, minAcc: 0.6, maxStrays: Infinity };
+    if (l === 3) return { text: L.pick(rnd, '0123456789'.split('')), mode: 'dictate', bee: false, rail: false, tol: 13, minAcc: 0.8, maxStrays: 3 };
+    return { text: String(L.randInt(rnd, 10, 20)), mode: 'dictate', bee: false, rail: false, tol: 15, minAcc: 0.8, maxStrays: 3 };
   };
 
-  /* 描红判定器：按笔画顺序、沿着路线依次经过各个点才算写对。
-   * 起笔点必须在当前笔画的起点附近；提前抬笔或偏离路线则这一笔重来。 */
+  function segDist(p, a, b) {
+    const abx = b[0] - a[0], aby = b[1] - a[1], l2 = abx * abx + aby * aby;
+    let t = l2 ? ((p[0] - a[0]) * abx + (p[1] - a[1]) * aby) / l2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(p[0] - (a[0] + abx * t), p[1] - (a[1] + aby * t));
+  }
+  L.distToPath = function (pt, pts) {
+    let m = Infinity;
+    for (let i = 1; i < pts.length; i++) m = Math.min(m, segDist(pt, pts[i - 1], pts[i]));
+    return m;
+  };
+
+  /* 描红判定器：按笔画顺序，手指必须“贴着轨道”从起点走到终点。
+   *  - 起笔点必须在当前笔画的起点附近；
+   *  - 手指与上一个采样点之间会被插值，快速划过、拐弯抛直线（抓近路）都会被查出来；
+   *  - 进度只在手指贴着“前方不远处”的轨道时才前进（走偏了就停住，move() 返回 'off'，回到轨道返回 'back'）；
+   *  - 抬笔时要求：已走到终点，并且贴着轨道的路程比例 >= minAcc。 */
   L.TraceChecker = class {
     constructor(strokes, opt) {
-      const o = Object.assign({ tol: 18, startTol: 28, step: 5 }, opt);
-      this.tol = o.tol; this.startTol = o.startTol;
+      const o = Object.assign({ tol: 14, startTol: 22, step: 4, window: 10, rail: false, minAcc: 0.8, maxStrays: Infinity }, opt);
+      this.tol = o.tol; this.startTol = o.startTol; this.win = o.window; this.rail = !!o.rail; this.minAcc = o.minAcc;
+      this.maxStrays = o.maxStrays;
+      this.step = o.step;
       this.dense = strokes.map(s => L.densify(s.pts, o.step));
       this.total = strokes.length;
-      this.s = 0; this.p = 0; this.active = false;
+      this.s = 0; this.report = null;
+      this._reset();
+    }
+    _reset() {
+      this.p = 0; this.active = false; this.off = false;
+      this.n = 0; this.good = 0; this.strays = 0; this.maxDev = 0; this.last = null;
     }
     get done() { return this.s >= this.total; }
     get strokeIndex() { return this.s; }
+    get accuracy() { return this.n ? this.good / this.n : 1; }
+    // 最后一个“在轨道上”的位置（走偏时回位圈放在这里）
+    get anchor() { const d = this.dense[this.s]; return d ? d[Math.max(0, Math.min(d.length - 1, this.p - 1))] : null; }
     begin(pt) {
       if (this.done) return false;
       const st = this.dense[this.s][0];
       if (Math.hypot(pt[0] - st[0], pt[1] - st[1]) > this.startTol) { this.active = false; return false; }
-      this.active = true; this.p = 1;
+      this._reset(); this.active = true; this.p = 1; this.last = pt;
       return true;
     }
-    move(pt) {
-      if (!this.active || this.done) return;
+    _sample(pt) {
       const d = this.dense[this.s];
-      // 在前方 8 个点（约 40 个单位）的窗口里找离手指最近的点，允许手速较快时稀疏采样
       let hit = -1, best = Infinity;
-      for (let j = this.p; j < Math.min(d.length, this.p + 8); j++) {
+      const lo = Math.max(0, this.p - 3), hi = Math.min(d.length, this.p + this.win);
+      for (let j = lo; j < hi; j++) {
         const dd = Math.hypot(pt[0] - d[j][0], pt[1] - d[j][1]);
         if (dd <= this.tol && dd < best) { best = dd; hit = j; }
       }
-      if (hit >= 0) this.p = hit + 1;
+      this.n++;
+      if (hit >= 0) {
+        this.good++;
+        if (hit + 1 > this.p) this.p = hit + 1;
+        const was = this.off; this.off = false;
+        return was ? 'back' : 'on';
+      }
+      this.maxDev = Math.max(this.maxDev, L.distToPath(pt, d));
+      if (!this.off) { this.off = true; this.strays++; }
+      return 'off';
     }
-    // 返回 'none' | 'retry' | 'stroke' | 'done'
+    // 返回当前点的状态：'on' 在轨道上 | 'off' 偏离了 | 'back' 刚刚回到轨道 | 'idle' 没在写
+    move(pt) {
+      if (!this.active || this.done) return 'idle';
+      const a = this.last || pt;
+      const dist = Math.hypot(pt[0] - a[0], pt[1] - a[1]);
+      const n = Math.max(1, Math.ceil(dist / this.step));
+      let r = 'on', sawOff = false;
+      for (let k = 1; k <= n; k++) {
+        r = this._sample([a[0] + (pt[0] - a[0]) * k / n, a[1] + (pt[1] - a[1]) * k / n]);
+        if (r === 'off') sawOff = true;
+      }
+      this.last = pt;
+      if (r !== 'off' && sawOff) r = 'back';
+      return r;
+    }
+    // 返回 'none' | 'retry' | 'stroke' | 'done'；不成功时 this.report.reason 是 'short'（没写完）或 'wobbly'（偏出轨道太多）
     end() {
       if (!this.active) return 'none';
       this.active = false;
       const len = this.dense[this.s].length;
-      if (this.p >= len - 2) {
-        this.s++; this.p = 0;
+      const reached = this.p >= len - 2, acc = this.accuracy;
+      // “偏出轨道”优先于“没写完”：走偏了进度会停住，这时要告诉孩子的是“沿着线”而不是“写完”
+      const wobbly = acc < this.minAcc || (!this.rail && (this.strays > this.maxStrays || this.maxDev > this.tol * 2.2));
+      const reason = wobbly ? 'wobbly' : (!reached ? 'short' : '');
+      this.report = { reached, acc, strays: this.strays, maxDev: this.maxDev, reason };
+      if (!this.report.reason) {
+        this.s++; this._reset();
         return this.done ? 'done' : 'stroke';
       }
-      this.p = 0;
+      this._reset();
       return 'retry';
     }
   };

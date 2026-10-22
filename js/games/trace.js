@@ -30,14 +30,45 @@
       }
       inner += '<g class="guide" style="opacity:' + (dictate ? 0 : 1) + '">' +
         lay.strokes.map(s => '<path d="' + pathD(s.pts) + '"/>').join('') + '</g>';
-      inner += '<g class="inkdone"></g><g class="inkcur"></g><g class="marker"></g>';
+      inner += '<g class="inkdone"></g><g class="inkcur"></g><g class="ringg"></g><g class="marker"></g>';
       svg.innerHTML = inner;
 
       const guide = svg.querySelector('.guide'), inkDone = svg.querySelector('.inkdone');
       const inkCur = svg.querySelector('.inkcur'), marker = svg.querySelector('.marker');
 
-      const checker = new L.TraceChecker(lay.strokes, { tol: q.tol });
-      let fails = 0, badStarts = 0, drawing = false, curPath = null, curD = '', peekTimer = null;
+      const ringG = svg.querySelector('.ringg');
+      const guidePaths = Array.prototype.slice.call(guide.querySelectorAll('path'));
+      const checker = new L.TraceChecker(lay.strokes, { tol: q.tol, rail: q.rail, minAcc: q.minAcc, maxStrays: q.maxStrays });
+      let fails = 0, badStarts = 0, drawing = false, peekTimer = null;
+      let segs = [], curSeg = null, curKind = '', curD = '', offRun = 0, lastHint = 0, lastPt = null;
+
+      // 当前这一笔高亮，写完的变淡，还没写的保持浅灰
+      function paintGuide() {
+        guidePaths.forEach((gp, i) => {
+          gp.setAttribute('class', i < checker.strokeIndex || checker.done ? 'done' : (i === checker.strokeIndex ? 'cur' : ''));
+        });
+      }
+      paintGuide();
+
+      function clearInk() { segs.forEach(s => s.remove()); segs = []; curSeg = null; curKind = ''; curD = ''; hideRing(); }
+      function startSeg(p, kind) {
+        curSeg = document.createElementNS(NS, 'path');
+        curSeg.setAttribute('class', kind === 'off' ? 'ink offpath' : 'ink');
+        curD = 'M' + p[0].toFixed(1) + ' ' + p[1].toFixed(1);
+        curSeg.setAttribute('d', curD);
+        inkCur.appendChild(curSeg); segs.push(curSeg); curKind = kind;
+      }
+      function extend(p) {
+        curD += ' L' + p[0].toFixed(1) + ' ' + p[1].toFixed(1);
+        curSeg.setAttribute('d', curD);
+      }
+      function showRing() {
+        if (ringG.firstChild) return;
+        const a = checker.anchor;
+        ringG.innerHTML = '<circle class="ring" cx="' + a[0].toFixed(1) + '" cy="' + a[1].toFixed(1) + '" r="14">' +
+          '<animate attributeName="r" values="12;19;12" dur="0.9s" repeatCount="indefinite"/></circle>';
+      }
+      function hideRing() { ringG.innerHTML = ''; offRun = 0; }
 
       function renderMarker(force) {
         marker.innerHTML = '';
@@ -63,9 +94,10 @@
         clearTimeout(peekTimer);
         peekTimer = setTimeout(() => { if (dictate && !api.locked) { guide.style.opacity = 0; renderMarker(); } }, 2200);
       }
-      function failed() {
+      function failed(reason) {
         fails++;
         if (dictate) peek();
+        else if (q.bee && fails % 2 === 1) renderMarker(true);
         if (fails % 2 === 0) {
           api.wrong({
             say: '没关系，再写一次', key: '写' + q.text, delay: 3800,
@@ -75,7 +107,7 @@
             }
           });
         } else {
-          api.say('再试一次，沿着线走哦');
+          api.say(reason === 'short' ? '要一直写到终点哦' : '再试一次，沿着线走哦');
         }
       }
 
@@ -86,11 +118,7 @@
         if (checker.begin(p)) {
           drawing = true;
           try { svg.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
-          curPath = document.createElementNS(NS, 'path');
-          curPath.setAttribute('class', 'ink');
-          curD = 'M' + p[0].toFixed(1) + ' ' + p[1].toFixed(1);
-          curPath.setAttribute('d', curD);
-          inkCur.appendChild(curPath);
+          clearInk(); startSeg(p, 'on');
         } else {
           badStarts++;
           const s = lay.strokes[checker.strokeIndex];
@@ -103,20 +131,39 @@
         if (!drawing) return;
         e.preventDefault();
         const p = toPt(e);
-        checker.move(p);
-        curD += ' L' + p[0].toFixed(1) + ' ' + p[1].toFixed(1);
-        curPath.setAttribute('d', curD);
+        const st = checker.move(p);
+        if (q.rail) {
+          // 轨道模式：走出轨道就不再画线，出现闪动的小圆圈，回到圈里才继续写
+          if (st === 'off') {
+            curKind = 'off'; offRun++; showRing();
+            const now = Date.now();
+            if (offRun >= 8 && now - lastHint > 7000) { lastHint = now; api.say('回到小圆圈，沿着线走哦'); }
+          } else if (st === 'back') {
+            hideRing(); startSeg(p, 'on');
+          } else if (curKind !== 'off') {
+            extend(p);
+          }
+        } else {
+          // 听写模式：线照常画，偏出轨道的部分变成橙色
+          const kind = st === 'off' ? 'off' : (st === 'idle' && curKind ? curKind : 'on');
+          if (kind !== curKind) startSeg(lastPt || p, kind);
+          extend(p);
+        }
+        lastPt = p;
       });
       function up() {
         if (!drawing) return;
         drawing = false;
+        hideRing();
         const r = checker.end();
+        if (r === 'none') { clearInk(); return; }
         if (r === 'retry') {
-          curPath.remove(); failed();
+          clearInk(); failed(checker.report && checker.report.reason);
         } else if (r === 'stroke' || r === 'done') {
-          inkDone.appendChild(curPath);
-          curPath.setAttribute('class', 'ink okstroke');
+          segs.forEach(s => { inkDone.appendChild(s); s.setAttribute('class', 'ink okstroke'); });
+          segs = []; curSeg = null;
           NG.audio.sfx.pop();
+          paintGuide();
           renderMarker();
           if (r === 'done') {
             marker.innerHTML = '';

@@ -29,7 +29,13 @@
     const promptEl = h('div', { class: 'prompt' }, speak, ptext);
     const stage = h('div', { class: 'stage' });
     const toast = h('div', { class: 'toast' });
-    const screen = h('div', { class: 'screen play game-' + game.id }, top, promptEl, stage, toast);
+    // 声音被关掉时（孩子或大人误点了静音键），在题目下面给一个醒目的“打开声音”按钮，免得“没声音”找不到原因
+    const muteHint = h('div', { class: 'mutehint' }, '🔇 声音关着 ',
+      h('button', { class: 'btn small', type: 'button', onClick: () => {
+        NG.store.setSetting('voice', true); NG.store.setSetting('sfx', true);
+        muteHint.remove(); NG.audio.unlock(); NG.audio.say(curPrompt);
+      } }, '打开声音'));
+    const screen = h('div', { class: 'screen play game-' + game.id }, top, promptEl, NG.audio.isMuted() ? muteHint : null, stage, toast);
     container.appendChild(screen);
 
     back.addEventListener('click', () => { destroy(); if (hooks.onExit) hooks.onExit(); });

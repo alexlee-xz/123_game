@@ -21,6 +21,9 @@
 <script src="../js/games/split.js"></script>
 <script src="../js/games/tenframe.js"></script>
 <script src="../js/games/shop.js"></script>
+<script src="../js/games/frog.js"></script>
+<script src="../js/games/equation.js"></script>
+<script src="../js/games/fruit.js"></script>
 <script src="../js/games/challenge.js"></script>
 <script src="../js/pages/home.js"></script>
 <script src="../js/pages/parent.js"></script>
@@ -102,7 +105,12 @@
       if (q.mode === 'fill') { Array.prototype.slice.call(st.querySelectorAll('.tf-cell:not(.on)')).forEach(click); await tick(); }
       return q.options.indexOf(q.answer);
     },
-    shop: async (q) => q.options.indexOf(q.answer)
+    shop: async (q) => q.options.indexOf(q.answer),
+    frog: async (q, st) => {
+      if (q.kind === 'land') { const b = st.querySelector('.hopbtn'); for (let i = 0; i < q.k; i++) click(b); await tick(1200); }
+      return q.options.indexOf(q.answer);
+    },
+    equation: async (q) => q.options.indexOf(q.answer)
   };
 
   async function runChoice(id, level, wrongPath) {
@@ -146,7 +154,7 @@
   }
 
   /* ---- 1. 选择题类游戏 ---- */
-  const choiceGames = ['count', 'subitize', 'match', 'merge', 'take', 'bus', 'split', 'tenframe', 'challenge'];
+  const choiceGames = ['count', 'subitize', 'match', 'merge', 'take', 'bus', 'split', 'tenframe', 'frog', 'equation', 'challenge'];
   for (const id of choiceGames) {
     for (let level = 1; level <= 4; level++) {
       for (let i = 0; i < 6; i++) await check(id + ' L' + level + ' 答对#' + i, () => runChoice(id, level, false));
@@ -241,6 +249,25 @@
         if (r.svg.querySelectorAll('.inkdone path').length !== r.lay.strokes.length) throw new Error('完成的笔画数不对');
       });
     }
+    await check('trace L' + level + ' 走偏：' + (level <= 2 ? '出现回位圈、不画线' : '偏离部分变橙'), async () => {
+      const r = traceRig(level);
+      const d = L.densify(r.lay.strokes[0].pts, 8);
+      r.fire('pointerdown', d[0]);
+      for (let i = 1; i < 5; i++) r.fire('pointermove', d[i]);
+      for (let i = 5; i < 14 && i < d.length; i++) r.fire('pointermove', [d[i][0] + 30, d[i][1] + 30]);
+      const ring = r.svg.querySelector('.ringg .ring'), off = r.svg.querySelector('.ink.offpath');
+      if (level <= 2) {
+        if (!ring) throw new Error('走偏后应出现回位圈');
+        if (off) throw new Error('轨道模式走偏后不应继续画线');
+      } else {
+        if (ring) throw new Error('听写关不应有回位圈');
+        if (!off) throw new Error('偏离部分应变成橙色');
+      }
+      r.fire('pointerup', d[13] || d[d.length - 1]);
+      if (r.svg.querySelector('.ringg .ring')) throw new Error('抬笔后回位圈应消失');
+      if (r.svg.querySelectorAll('.inkcur path').length) throw new Error('失败后应清掉笔迹');
+      if (r.log.right !== 0) throw new Error('走偏的不应通过');
+    });
     await check('trace L' + level + ' 半途抬笔 + 写错起点', async () => {
       const r = traceRig(level);
       const s0 = r.lay.strokes[0];
@@ -251,6 +278,67 @@
       if (r.log.wrong !== 1) throw new Error('第 2 次失败应记 1 次错 ' + JSON.stringify(r.log));
       r.stroke(s0.pts, 0.4); r.stroke(s0.pts, 0.4);            // fails 4 -> 演示
       if (r.log.wrong !== 2 || !r.api.locked) throw new Error('应进入演示 ' + JSON.stringify(r.log));
+    });
+  }
+
+  /* ---- 3b. 切水果 ---- */
+  function fruitRig(level) {
+    const st = fresh(), { api, log } = mkApi(level, st);
+    cap.q = null; NG.byId('fruit').round(level, api);
+    const q = cap.q, svg = st.querySelector('svg.fruitpad');
+    const toClient = (p) => { const pt = svg.createSVGPoint(); pt.x = p[0]; pt.y = p[1]; const c = pt.matrixTransform(svg.getScreenCTM()); return [c.x, c.y]; };
+    const fire = (type, p) => { const c = toClient(p); svg.dispatchEvent(new PointerEvent(type, { clientX: c[0], clientY: c[1], pointerId: 1, bubbles: true, cancelable: true })); };
+    const swipe = (ln) => {
+      const a = [ln.x1, ln.y1], b = [ln.x2, ln.y2];
+      fire('pointerdown', a); fire('pointermove', [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]); fire('pointermove', b); fire('pointerup', b);
+    };
+    return { st, api, log, q, svg, swipe };
+  }
+  for (let i = 0; i < 4; i++) {
+    for (const wrongPath of [false, true]) {
+      await check('fruit L1 ' + (wrongPath ? '答错' : '答对') + '#' + i, async () => {
+        const st = fresh(), { api, log } = mkApi(1, st);
+        cap.q = null; NG.byId('fruit').round(1, api);
+        const q = cap.q, btns = Array.prototype.slice.call(st.querySelectorAll('.choices .choice'));
+        if (btns.length !== 3 || btns.some(b => !b.querySelector('svg'))) throw new Error('应有 3 个带图的选项');
+        checkOverflow('fruit L1');
+        if (!wrongPath) { click(btns[q.answerIndex]); if (log.right !== 1 || log.wrong) throw new Error(JSON.stringify(log)); return; }
+        const others = btns.filter((_, k) => k !== q.answerIndex);
+        click(others[0]); click(others[1]);
+        if (log.wrong !== 2 || !st.querySelector('.choice.hint')) throw new Error('答错两次应亮出正确答案 ' + JSON.stringify(log));
+      });
+    }
+  }
+  for (let level = 2; level <= 4; level++) {
+    for (let i = 0; i < 4; i++) {
+      await check('fruit L' + level + ' 切对#' + i, async () => {
+        const r = fruitRig(level);
+        if (!r.svg || !r.svg.getScreenCTM()) throw new Error('没有切水果画布');
+        checkOverflow('fruit L' + level);
+        if (!!r.svg.querySelector('.guideline') !== (level === 2)) throw new Error('只有第 2 级一开始就有虚线');
+        // 稍微切偏一点（4 个单位）也应通过
+        r.q.ideal.forEach((ln, k) => r.swipe(L.lineAt(Math.atan2(ln.y2 - ln.y1, ln.x2 - ln.x1) * 180 / Math.PI, k === 0 ? 4 : -4)));
+        if (r.log.right !== 1 || r.log.wrong !== 0) throw new Error(JSON.stringify(r.log));
+        if (r.svg.querySelectorAll('.piece').length !== r.q.pieces) throw new Error('应分成 ' + r.q.pieces + ' 块，实际 ' + r.svg.querySelectorAll('.piece').length);
+      });
+    }
+    await check('fruit L' + level + ' 切歪两次 -> 演示', async () => {
+      const r = fruitRig(level);
+      const need = r.q.pieces === 4 ? 2 : 1;
+      const bad = (k) => L.lineAt(0, 40 + k);                    // 偏离中心的平行线：一刀太偏 / 两刀平行
+      for (let n = 0; n < need; n++) r.swipe(bad(n));
+      if (r.log.wrong !== 1 || r.log.right) throw new Error('第一次切歪应记 1 次错 ' + JSON.stringify(r.log));
+      if (!r.svg.querySelector('.guideline')) throw new Error('第一次切歪后应出现虚线');
+      if (r.svg.querySelectorAll('.cutline').length) throw new Error('切歪之后应清掉刀痕');
+      for (let n = 0; n < need; n++) r.swipe(bad(n));
+      if (r.log.wrong !== 2 || !r.api.locked) throw new Error('第二次切歪应演示 ' + JSON.stringify(r.log));
+      if (r.svg.querySelectorAll('.piece').length !== r.q.pieces) throw new Error('演示时应切开');
+    });
+    await check('fruit L' + level + ' 没从外面划过去不算一刀', async () => {
+      const r = fruitRig(level);
+      r.swipe({ x1: 100, y1: 100, x2: 100, y2: 220 });            // 起点在水果里面
+      r.swipe({ x1: 90, y1: 90, x2: 110, y2: 110 });              // 太短
+      if (r.log.wrong || r.log.right || r.svg.querySelectorAll('.cutline').length) throw new Error('这样的划动应被忽略');
     });
   }
 
