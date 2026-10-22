@@ -44,6 +44,11 @@
 
   /* 记录最近一次出题和挑战关选中的游戏，方便驱动 */
   const cap = { q: null, pick: null };
+  // 收集台词模式：smoke.html?collect=300 会把每类题目多出几百次，把游戏会说的话都记下来（tools/collect_voice.ps1）
+  const mCollect = /collect=(\d+)/.exec(location.search), COLLECT = !!mCollect, REP = mCollect ? +mCollect[1] : 6;
+  const said = new Set();
+  const noteSay = (t) => { if (t) said.add(String(t)); };
+  NG.audio.say = (t) => { noteSay(t); return Promise.resolve(); };      // 测试里不真的发声、也不联网
   Object.keys(L).filter(k => /^gen/.test(k)).forEach(k => {
     const o = L[k]; L[k] = function () { const q = o.apply(this, arguments); cap.q = q; return q; };
   });
@@ -55,12 +60,13 @@
       stage, level,
       locked: false,
       get wrongs() { return log.wrong; },
-      prompt(t) { log.prompts.push(t); },
-      say() { return Promise.resolve(); },
+      prompt(t) { noteSay(t); log.prompts.push(t); },
+      say(t) { noteSay(t); return Promise.resolve(); },
       after(ms, fn) { return setTimeout(fn, 0); },
-      right() { if (api.locked) return; api.locked = true; log.right++; },
+      right(o) { if (api.locked) return; noteSay(o && o.say); api.locked = true; log.right++; },
       wrong(o) {
         if (api.locked) return;
+        noteSay(o && o.say);
         log.wrong++;
         if (log.wrong >= 2) { if (o && o.reveal) o.reveal(); api.locked = true; }
       }
@@ -157,13 +163,13 @@
   const choiceGames = ['count', 'subitize', 'match', 'merge', 'take', 'bus', 'split', 'tenframe', 'frog', 'equation', 'challenge'];
   for (const id of choiceGames) {
     for (let level = 1; level <= 4; level++) {
-      for (let i = 0; i < 6; i++) await check(id + ' L' + level + ' 答对#' + i, () => runChoice(id, level, false));
-      for (let i = 0; i < 2; i++) await check(id + ' L' + level + ' 答错#' + i, () => runChoice(id, level, true));
+      for (let i = 0; i < REP; i++) await check(id + ' L' + level + ' 答对#' + i, () => runChoice(id, level, false));
+      for (let i = 0; i < (COLLECT ? 0 : 2); i++) await check(id + ' L' + level + ' 答错#' + i, () => runChoice(id, level, true));
     }
   }
   // 小商店：找零是选择题，付钱要放硬币
   for (let level = 1; level <= 4; level++) {
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < REP; i++) {
       await check('shop L' + level + ' #' + i, async () => {
         const st = fresh(), { api, log } = mkApi(level, st);
         cap.q = null; NG.byId('shop').round(level, api);
@@ -198,7 +204,7 @@
 
   /* ---- 2. 天平 ---- */
   for (let level = 1; level <= 4; level++) {
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < REP; i++) {
       await check('balance L' + level + ' 平衡#' + i, async () => {
         const st = fresh(), { api, log } = mkApi(level, st);
         cap.q = null; NG.byId('balance').round(level, api);
@@ -460,6 +466,39 @@
   out.push('模拟屏幕宽度 ' + Math.round(host.getBoundingClientRect().width) + 'px');
   out.push((fails ? 'FAILED ' + fails : 'ALL OK') + '  (passes ' + passes + ')');
   document.getElementById('out').textContent = out.join('\n');
+  if (COLLECT) {
+    // 游戏里不容易点到、或组合很多的台词，直接按规则列举
+    const nz = L.numZh, qz = L.qtyZh, S = [];
+    for (let n = 0; n <= 20; n++) S.push(nz(n));
+    ['太棒了！', '答对啦！', '真厉害！', '好聪明！', '做得好！', '再想一想', '我们一起看看', '得到一张新贴纸啦！', '全部答对，太厉害了！', '完成啦，真棒！',
+      '声音打开啦', NG.audio.TEST_LINE, '一共有几个？', '现在车上有几只？', '你放了几个？', '还剩几个？', '要跳几步呢？', '青蛙落在几？',
+      '再切一刀', '要从水果的外面，划到另一边的外面哦', '没关系，再写一次', '要一直写到终点哦', '再试一次，沿着线走哦',
+      '从小圆点开始写', '回到小圆圈，沿着线走哦', '先放几个硬币吧', '放多啦，拿走一块试试', '对啦，一样大，每个小朋友一半',
+      '切成了一样大的四份，每个小朋友一份', '切成了一样大的两半，每个小朋友一半', '要切成四块哦，两刀要交叉', '没有切开哦',
+      '切得不一样大，大小要一样才公平'].forEach(t => S.push(t));
+    for (let a = 0; a <= 20; a++) for (let b = 0; b <= 10; b++) {
+      if (a + b <= 20) S.push(nz(a) + '加' + nz(b) + '等于' + nz(a + b));
+      if (b <= a) S.push(nz(a) + '减' + nz(b) + '等于' + nz(a - b));
+    }
+    for (let a = 1; a <= 10; a++) for (let b = 1; a + b <= 10; b++) {
+      S.push(nz(a) + '和' + nz(b) + '，合起来是' + nz(a + b), nz(a) + '和' + nz(b) + '合起来是' + nz(a + b));
+      S.push(nz(a + b) + '等于' + nz(a) + '加' + nz(b) + '，平衡啦！');
+    }
+    for (let a = 1; a <= 10; a++) for (let b = 1; b <= 10; b++) S.push(qz(a) + '个和' + qz(b) + '个合起来，一共有几个？');
+    for (let k = 1; k <= 9; k++) S.push(nz(k) + '加' + nz(10 - k) + '等于十');
+    for (let n = 1; n <= 10; n++) S.push(nz(n) + '个点', nz(n) + '元', '找回' + nz(n) + '元', '刚好' + nz(n) + '元，谢谢！', '还差' + nz(n) + '元', '多了' + nz(n) + '元');
+    L.COUNT_ITEMS.forEach(it => { for (let n = 1; n <= 10; n++) S.push('一共' + qz(n) + it.unit, '一共' + qz(n) + it.unit + it.name); });
+    for (let l = 1; l <= 4; l++) for (let i = 0; i < 400; i++) {
+      const t = L.genTrace(l).text, w = nz(parseInt(t, 10));
+      S.push('听一听，写数字' + w, '跟着小蜜蜂，写数字' + w, w);
+      if (t.length === 1) S.push(L.RHYME[t].replace(/^\d/, d => nz(+d)));
+    }
+    S.forEach(noteSay);
+    const map = {}; said.forEach(t => { map[NG.audio.vid(t)] = t; });
+    let el = document.getElementById('voice');
+    if (!el) { el = document.createElement('pre'); el.id = 'voice'; document.body.appendChild(el); }
+    el.textContent = JSON.stringify(map);
+  }
 })().catch(e => { document.getElementById('out').textContent = 'CRASH ' + (e && e.stack || e); });
 </script>
 </body></html>

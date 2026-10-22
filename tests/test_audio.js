@@ -41,11 +41,34 @@ function load(opt) {
     console, setTimeout, clearTimeout, Date, Promise, Object, Array, Error, RegExp,
     speechSynthesis: synth,
     SpeechSynthesisUtterance: opt.noTTS ? undefined : function (text) { this.text = text; this.volume = 1; },
+    Audio: opt.Audio, btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
+    navigator: { userAgent: opt.ua || 'Mozilla/5.0' },
     NG: { store: { get: () => ({ settings }) } }
   });
   ctx.window = ctx;
   vm.runInContext(SRC, ctx);
-  return { A: ctx.NG.audio, synth, settings };
+  return { A: ctx.NG.audio, NG: ctx.NG, synth, settings };
+}
+
+// 模拟 <audio>：behavior(src) 返回 ok / error / blocked / hang
+function mkAudio(behavior) {
+  const played = [];
+  class Au {
+    constructor() { this.src = ''; this.duration = 0.02; }
+    play() {
+      played.push(this.src);
+      const b = behavior(this.src);
+      if (b === 'blocked') return Promise.reject(Object.assign(new Error('blocked'), { name: 'NotAllowedError' }));
+      if (b === 'error') { setTimeout(() => this.onerror && this.onerror(), 5); return Promise.resolve(); }
+      if (b === 'hang') return Promise.resolve();
+      const me = this.src;
+      setTimeout(() => { if (this.src !== me) return; this.onplaying && this.onplaying(); setTimeout(() => this.src === me && this.onended && this.onended(), 10); }, 5);
+      return Promise.resolve();
+    }
+    pause() {} load() {}
+  }
+  Au.played = played;
+  return Au;
 }
 
 let passed = 0;
@@ -148,6 +171,104 @@ async function test(name, fn) {
     const t0 = Date.now();
     await A.say('卡');
     assert(Date.now() - t0 < 5000);
+  });
+
+  await test('mp3：有现成的录音就播录音，不开浏览器朗读（微信里没有朗读也能出声）', async () => {
+    for (const noTTS of [false, true]) {
+      const Au = mkAudio(() => 'ok');
+      const { A, NG, synth } = load({ Audio: Au, noTTS, ua: 'MicroMessenger/8.0' });
+      NG.voiceMap = {}; NG.voiceMap[A.vid('三加四等于七')] = 1;
+      await A.say('三加四等于七');
+      assert.strictEqual(Au.played.length, 1);
+      assert(Au.played[0].endsWith('audio/v/' + A.vid('三加四等于七') + '.mp3'), Au.played[0]);
+      if (synth) assert.strictEqual(synth.spoken.length, 0);
+      const s = A.status();
+      assert.strictEqual(s.clips, 1); assert.strictEqual(s.wechat, true); assert.strictEqual(s.player, true);
+    }
+  });
+
+  await test('mp3：没有录音时，有朗读用朗读；没有朗读（微信）时走在线朗读', async () => {
+    let Au = mkAudio(() => 'ok');
+    let r = load({ Audio: Au });
+    r.NG.voiceMap = {};
+    await r.A.say('没录过的话');
+    assert.strictEqual(Au.played.length, 0); assert.strictEqual(r.synth.spoken.length, 1);
+    Au = mkAudio(() => 'ok');
+    r = load({ Audio: Au, noTTS: true });
+    await r.A.say('没录过的话');
+    assert.strictEqual(Au.played.length, 1);
+    assert(/^https:\/\/.*text=/.test(Au.played[0]) && Au.played[0].indexOf(encodeURIComponent('没录过的话')) > 0, Au.played[0]);
+  });
+
+  await test('mp3：加载失败先重试一次，再失败或被拦截时回退到朗读', async () => {
+    let Au = mkAudio(() => 'error');
+    let r = load({ Audio: Au });
+    r.NG.voiceMap = {}; r.NG.voiceMap[r.A.vid('坏了')] = 1;
+    await r.A.say('坏了');
+    assert.strictEqual(Au.played.length, 2); assert(Au.played[1].indexOf('r=') > 0);
+    assert.strictEqual(r.synth.spoken.length, 1);
+    Au = mkAudio(() => 'blocked');
+    r = load({ Audio: Au });
+    r.NG.voiceMap = {}; r.NG.voiceMap[r.A.vid('被拦')] = 1;
+    await r.A.say('被拦');
+    assert.strictEqual(Au.played.length, 1);          // 被拦截重试没有用
+    assert.strictEqual(r.synth.spoken.length, 1);
+    // 第一次失败、重试成功：不需要朗读
+    let n = 0;
+    Au = mkAudio(() => (n++ === 0 ? 'error' : 'ok'));
+    r = load({ Audio: Au });
+    r.NG.voiceMap = {}; r.NG.voiceMap[r.A.vid('重试')] = 1;
+    await r.A.say('重试');
+    assert.strictEqual(Au.played.length, 2); assert.strictEqual(r.synth.spoken.length, 0);
+  });
+
+  await test('mp3：连续 say 只有最后一句算数；cancel 后不再出声；声音关着时不播', async () => {
+    const Au = mkAudio(() => 'ok');
+    const { A, NG, settings } = load({ Audio: Au });
+    NG.voiceMap = {};
+    ['甲', '乙', '丙'].forEach(t => { NG.voiceMap[A.vid(t)] = 1; });
+    const p1 = A.say('甲'), p2 = A.say('乙'), p3 = A.say('丙');
+    await Promise.all([p1, p2, p3]);
+    assert(Au.played[Au.played.length - 1].indexOf(A.vid('丙')) > 0);
+    const n = Au.played.length;
+    settings.voice = false;
+    await A.say('甲');
+    assert.strictEqual(Au.played.length, n);
+    settings.voice = true;
+    const p = A.say('乙'); A.cancel(); await p;
+    assert(Au.played.length >= n);       // 不崩溃、不挂起
+  });
+
+  await test('mp3：播着播着不出声也不触发 ended（加载卡住）时不会把游戏卡死', async () => {
+    const Au = mkAudio(() => 'hang');
+    const { A, NG } = load({ Audio: Au, noTTS: true });
+    NG.voiceMap = {}; NG.voiceMap[A.vid('卡')] = 1;
+    const t0 = Date.now();
+    await A.say('卡');
+    assert(Date.now() - t0 < 15000);
+  });
+
+  await test('vid：稳定、不同台词不同名、只含十六进制', async () => {
+    const { A } = load();
+    const ids = new Set();
+    const words = ['一', '二', '三', '三加四等于七', '三加五等于八', '七减三等于四', '你好，听到我说话了吗？'];
+    words.forEach(w => { const id = A.vid(w); assert(/^[0-9a-f]{1,14}$/.test(id), id); assert.strictEqual(A.vid(w), id); ids.add(id); });
+    assert.strictEqual(ids.size, words.length);
+    assert.strictEqual(A.vid('三加四等于七'), 'd6fb9aad784d4');      // 录音文件是按这个名字生成的，改哈希算法会让所有录音失效
+    assert.strictEqual(A.vid('三'), '142f3e1c3c0b55');
+  });
+
+  await test('录音文件：voicemap 里的每一项都有文件；文件名和台词的哈希一致；夸奖、试听等固定台词都有', async () => {
+    const root = path.join(__dirname, '..');
+    const { A, NG } = load();
+    vm.runInContext(fs.readFileSync(path.join(root, 'js', 'core', 'voicemap.js'), 'utf8'), vm.createContext({ NG, window: undefined }));
+    const ids = Object.keys(NG.voiceMap);
+    assert(ids.length > 1000, '录音太少：' + ids.length);
+    ids.forEach(i => { const f = path.join(root, 'audio', 'v', i + '.mp3'); assert(fs.existsSync(f) && fs.statSync(f).size > 800, '缺文件 ' + i); });
+    const lines = JSON.parse(fs.readFileSync(path.join(root, 'tools', 'voice_lines.json'), 'utf8'));
+    Object.keys(lines).forEach(i => assert.strictEqual(A.vid(lines[i]), i, '哈希对不上：' + lines[i]));
+    ['太棒了！', '答对啦！', '真厉害！', '好聪明！', '做得好！', '再想一想', '我们一起看看', '完成啦，真棒！', '声音打开啦', A.TEST_LINE, '三加四等于七', '七减三等于四']
+      .forEach(t => assert(NG.voiceMap[A.vid(t)], '没有录音：' + t));
   });
 
   console.log('\n' + passed + ' 项通过' + (process.exitCode ? '，有失败' : ''));

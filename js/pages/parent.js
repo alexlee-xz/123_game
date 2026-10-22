@@ -150,8 +150,13 @@
     nameIn.addEventListener('change', () => NG.store.setName(nameIn.value || '小朋友'));
     const sndMsg = h('div', { class: 'small' });
     const describeSound = (s) => {
-      if (!s.tts) return '⚠️ 这个浏览器不支持朗读。请改用 Chrome、Edge 或 Safari 打开（微信内置浏览器通常不支持）。';
       if (s.muted) return '🔇 声音和朗读开关是关着的，请勾选上面的“声音和朗读”。';
+      if (s.clips > 0 && s.player) {
+        const err = { 'clip-fail': '录音没有下载下来，请检查网络后再点一次“试听”。', 'clip-blocked': '浏览器拦截了自动播放，请先点一下页面，再点“试听”。' }[s.lastError];
+        return '✅ 使用录好的普通话语音（' + s.clips + ' 句）' + (s.wechat ? '，微信里也能听到' : '') + '。' +
+          (err ? '⚠️ ' + err : '如果还是听不到，请检查设备音量、有没有静音（iPhone 侧边的静音拨片）。');
+      }
+      if (!s.tts) return '⚠️ 这个浏览器不支持朗读。请改用 Chrome、Edge 或 Safari 打开（微信内置浏览器通常不支持）。';
       if (s.voiceCount === 0) return '这台设备还没有加载出语音列表。请稍等几秒再点一次“试听”。';
       if (s.zhCount === 0) return '⚠️ 没有找到中文语音（共 ' + s.voiceCount + ' 个语音都不是中文）。Windows：设置 → 时间和语言 → 语音 里添加中文；Android：系统设置 → 文字转语音输出；iPhone：设置 → 辅助功能 → 朗读内容。';
       return '已找到中文语音：' + (s.voice || '默认') + '。如果还是听不到，请检查设备音量、有没有静音（iPhone 侧边的静音拨片）。' + (s.lastError ? '（最近一次报错：' + s.lastError + '）' : '');
