@@ -252,6 +252,42 @@ function trace(checker, strokes, opt) {
 }
 const allTexts = '0123456789'.split('').concat(['10', '11', '12', '15', '20']);
 
+test('描红：8 是一笔写成的“8”——上圈、下圈，中间交叉一次，回到起点；不是两个圆叠在一起', () => {
+  const st = L.digitStrokes('8');
+  assert.strictEqual(st.length, 1);
+  const p = L.densify(st[0], 2);
+  // 起点和终点重合（封闭）
+  assert(Math.hypot(p[0][0] - p[p.length - 1][0], p[0][1] - p[p.length - 1][1]) < 4);
+  // 自交叉恰好 1 次
+  const cross = (a, b, c, d) => {
+    const o = (p1, p2, p3) => (p2[0] - p1[0]) * (p3[1] - p1[1]) - (p2[1] - p1[1]) * (p3[0] - p1[0]);
+    return o(a, b, c) * o(a, b, d) < 0 && o(c, d, a) * o(c, d, b) < 0;
+  };
+  let x = 0;
+  for (let i = 1; i < p.length; i++) for (let j = i + 2; j < p.length; j++) {
+    if (i === 1 && j >= p.length - 1) continue;      // 首尾相接处不算交叉
+    if (cross(p[i - 1], p[i], p[j - 1], p[j])) x++;
+  }
+  assert.strictEqual(x, 1, '交叉次数 ' + x);
+  // 上圈比下圈小，整体在格子里，宽不超过 70、高占满
+  const xs = p.map(q => q[0]), ys = p.map(q => q[1]);
+  assert(Math.min(...xs) > 8 && Math.max(...xs) < 92 && Math.min(...ys) < 18 && Math.max(...ys) > 126 && Math.min(...ys) >= 0 && Math.max(...ys) <= 140);
+  const widthAt = (y) => { const v = p.filter(q => Math.abs(q[1] - y) < 3).map(q => q[0]); return Math.max(...v) - Math.min(...v); };
+  assert(widthAt(38) < widthAt(98), '上圈应比下圈窄');
+  // 起笔在右上；先向左绕过上圈顶部（逆时针）
+  assert(p[0][0] > 55 && p[0][1] < 35);
+  const topIdx = p.findIndex(q => q[1] < 17);
+  assert(topIdx > 0 && p[topIdx][0] < p[0][0] + 1);
+  // 两个圆叠在一起（旧的画法）的路线不能通过 8 的判定
+  const c8 = new L.TraceChecker(L.layoutText('8').strokes, { tol: 14, minAcc: 0.8 });
+  const circles = L.densify([].concat(...[0, 1].map(k => {
+    const cy = k ? 98 : 38, rx = k ? 30 : 24, ry = k ? 33 : 24, o = [];
+    for (let a = -90; a <= 270; a += 15) o.push([50 + rx * Math.cos(a * Math.PI / 180), cy + ry * Math.sin(a * Math.PI / 180)]);
+    return o;
+  })), 3);
+  if (c8.begin(circles[0])) { circles.forEach(q => c8.move(q)); assert.notStrictEqual(c8.end(), 'done'); }
+});
+
 test('描红：标准笔顺描写每个数字都能完成', () => {
   allTexts.forEach(t => {
     const lay = L.layoutText(t);
