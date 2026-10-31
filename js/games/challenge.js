@@ -4,7 +4,7 @@
   const NG = root.NG, L = NG.logic;
 
   NG.registerGame({
-    id: 'challenge', stage: 5, icon: '🏆', title: '挑战关', blurb: '各种题目一起来',
+    id: 'challenge', stage: 6, icon: '🏆', title: '挑战关', blurb: '各种题目一起来',
     round(level, api) {
       const id = L.pickChallenge(level);
       const g = NG.byId(id);

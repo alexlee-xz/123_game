@@ -95,7 +95,7 @@
 
   /* ---------- 积木掉落（减法） ---------- */
   NG.registerGame({
-    id: 'take', stage: 4, icon: '⬇️', title: '积木掉落', blurb: '拿走几个，还剩几个',
+    id: 'take', stage: 3, icon: '⬇️', title: '积木掉落', blurb: '拿走几个，还剩几个',
     round(level, api) {
       const q = L.genTake(level);
       api.prompt('有' + L.qtyZh(q.n) + '个方块，拿走' + L.qtyZh(q.k) + '个，还剩几个？点方块塔，把方块拿走');

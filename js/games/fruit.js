@@ -66,7 +66,7 @@
   }
 
   NG.registerGame({
-    id: 'fruit', stage: 6, icon: '🍉', title: '切水果', blurb: '平均分，一样大',
+    id: 'fruit', stage: 5, icon: '🍉', title: '切水果', blurb: '平均分，一样大',
     round(level, api) {
       const q = L.genFruit(level);
       const name = q.item.name;

@@ -16,7 +16,7 @@
   }
 
   NG.registerGame({
-    id: 'tenframe', stage: 4, icon: '🔟', title: '十格框', blurb: '凑满十',
+    id: 'tenframe', stage: 2, icon: '🔟', title: '十格框', blurb: '凑满十',
     round(level, api) {
       const q = L.genTen(level);
       const eq = h('div', { class: 'equation' });

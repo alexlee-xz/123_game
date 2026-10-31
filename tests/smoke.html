@@ -21,9 +21,11 @@
 <script src="../js/games/split.js"></script>
 <script src="../js/games/tenframe.js"></script>
 <script src="../js/games/shop.js"></script>
+<script src="../js/games/clock.js"></script>
 <script src="../js/games/frog.js"></script>
 <script src="../js/games/equation.js"></script>
 <script src="../js/games/fruit.js"></script>
+<script src="../js/games/tictactoe.js"></script>
 <script src="../js/games/challenge.js"></script>
 <script src="../js/pages/home.js"></script>
 <script src="../js/pages/parent.js"></script>
@@ -116,7 +118,8 @@
       if (q.kind === 'land') { const b = st.querySelector('.hopbtn'); for (let i = 0; i < q.k; i++) click(b); await tick(1200); }
       return q.options.indexOf(q.answer);
     },
-    equation: async (q) => q.options.indexOf(q.answer)
+    equation: async (q) => q.options.indexOf(q.answer),
+    clock: async (q) => q.options.indexOf(q.answer)
   };
 
   async function runChoice(id, level, wrongPath) {
@@ -160,7 +163,7 @@
   }
 
   /* ---- 1. 选择题类游戏 ---- */
-  const choiceGames = ['count', 'subitize', 'match', 'merge', 'take', 'bus', 'split', 'tenframe', 'frog', 'equation', 'challenge'];
+  const choiceGames = ['count', 'subitize', 'match', 'merge', 'take', 'bus', 'split', 'tenframe', 'frog', 'equation', 'clock', 'challenge'];
   for (const id of choiceGames) {
     for (let level = 1; level <= 4; level++) {
       for (let i = 0; i < REP; i++) await check(id + ' L' + level + ' 答对#' + i, () => runChoice(id, level, false));
@@ -348,6 +351,119 @@
     });
   }
 
+  /* ---- 3c. 三子棋 ---- */
+  await check('三子棋规则与电脑强度', async () => {
+    let r = L.tttResult([1, 1, 1, 2, 2, 0, 0, 0, 0]);
+    if (!r.over || r.winner !== 1 || r.line.join() !== '0,1,2') throw new Error('横线判定不对');
+    r = L.tttResult([1, 2, 1, 1, 2, 2, 2, 1, 1]);
+    if (!r.over || r.winner !== 0 || r.line) throw new Error('平局判定不对');
+    if (L.tttResult([1, 2, 0, 0, 0, 0, 0, 0, 0]).over) throw new Error('没下满不应结束');
+    if (L.tttFinish([2, 2, 0, 1, 1, 0, 0, 0, 0], 2) !== 2 || L.tttFinish([1, 1, 0, 2, 2, 0, 0, 0, 0], 1) !== 2) throw new Error('找一步赢棋不对');
+    if (L.tttMove(2, [2, 2, 0, 1, 1, 0, 0, 0, 0]) !== 2) throw new Error('2 级电脑应能赢就赢');
+    if (L.tttMove(3, [1, 1, 0, 2, 0, 0, 0, 0, 0]) !== 2) throw new Error('3 级电脑应挡住对方');
+    for (let l = 1; l <= 4; l++) for (let i = 0; i < 50; i++) {
+      const b = [1, 0, 0, 0, 0, 0, 0, 0, 0], m = L.tttMove(l, b);
+      if (m < 1 || m > 8 || b[m]) throw new Error('电脑走了不能走的格子');
+    }
+    // 4 级电脑：随机乱下的小朋友不可能赢
+    const rr = L.mulberry32(7);
+    for (let g = 0; g < 40; g++) {
+      const b = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+      for (;;) {
+        b[L.pick(rr, L.tttEmpty(b))] = 1;
+        let res = L.tttResult(b); if (res.over) { if (res.winner === 1) throw new Error('4 级电脑输给了乱下的小朋友'); break; }
+        b[L.tttMove(4, b, rr)] = 2;
+        res = L.tttResult(b); if (res.over) break;
+      }
+    }
+  });
+  // 让电脑按剧本走，再让“小朋友”按剧本点格子
+  async function tttScript(kid, ai, level) {
+    const st = fresh(), { api, log } = mkApi(level || 1, st);
+    cap.q = null; NG.byId('tictactoe').round(level || 1, api);
+    const cells = st.querySelectorAll('.tttcell');
+    if (cells.length !== 9) throw new Error('棋盘应有 9 格');
+    checkOverflow('tictactoe');
+    const orig = L.tttMove; let k = 0;
+    L.tttMove = () => ai[k++];
+    try { for (const i of kid) { if (api.locked) break; click(cells[i]); await tick(20); } }
+    finally { L.tttMove = orig; }
+    return { st, api, log, cells };
+  }
+  await check('三子棋：连成三个 -> 答对', async () => {
+    const r = await tttScript([0, 1, 2], [8, 7]);
+    if (r.log.right !== 1 || r.log.wrong) throw new Error(JSON.stringify(r.log));
+    if (r.st.querySelectorAll('.tttcell.win').length !== 3) throw new Error('应高亮连成的三格');
+  });
+  await check('三子棋：平局也算过关', async () => {
+    const r = await tttScript([0, 2, 3, 7, 8], [1, 4, 5, 6]);
+    if (r.log.right !== 1 || r.log.wrong) throw new Error(JSON.stringify(r.log));
+  });
+  await check('三子棋：输一局可再来，输两局演示提示', async () => {
+    const r = await tttScript([3, 4, 8, 3, 4, 8], [0, 1, 2, 0, 1, 2]);
+    if (r.log.wrong !== 2 || r.log.right || !r.api.locked) throw new Error('输两局应记 2 次错并结束 ' + JSON.stringify(r.log));
+    if (!/提示/.test(r.st.textContent)) throw new Error('第二次输应给提示');
+  });
+  await check('三子棋：输一局后棋盘清空重来', async () => {
+    const r = await tttScript([3, 4, 8], [0, 1, 2]);
+    await tick(30);
+    if (r.log.wrong !== 1 || r.api.locked) throw new Error('输一局应记 1 次错且可继续 ' + JSON.stringify(r.log));
+    if (Array.prototype.some.call(r.cells, c => c.textContent)) throw new Error('再来一局时棋盘应清空');
+  });
+  for (let level = 1; level <= 4; level++) {
+    await check('三子棋 L' + level + ' 随便下能走完', async () => {
+      const st = fresh(), { api, log } = mkApi(level, st);
+      cap.q = null; NG.byId('tictactoe').round(level, api);
+      for (let n = 0; n < 60 && !api.locked; n++) {
+        const free = st.querySelectorAll('.tttcell:not(.taken)');
+        if (free.length) click(free[Math.floor(Math.random() * free.length)]);
+        await tick(15);
+      }
+      if (!api.locked) throw new Error('一直没结束');
+      if (log.right + (log.wrong >= 2 ? 1 : 0) !== 1) throw new Error('结果不唯一 ' + JSON.stringify(log));
+    });
+  }
+
+  /* ---- 3d. 认时间 ---- */
+  await check('认时间读法', async () => {
+    const T = [[2, 0, '两点', '2点'], [3, 30, '三点半', '3点半'], [12, 5, '十二点零五分', '12点5分'], [10, 45, '十点四十五分', '10点45分'],
+      [9, 20, '九点二十分', '9点20分'], [1, 15, '一点十五分', '1点15分'], [11, 55, '十一点五十五分', '11点55分']];
+    T.forEach(t => {
+      if (L.clockSay(t[0], t[1]) !== t[2]) throw new Error('读法 ' + t[0] + ':' + t[1] + ' = ' + L.clockSay(t[0], t[1]));
+      if (L.clockLabel(t[0], t[1]) !== t[3]) throw new Error('写法 ' + t[0] + ':' + t[1] + ' = ' + L.clockLabel(t[0], t[1]));
+    });
+  });
+  for (let level = 1; level <= 4; level++) {
+    for (let i = 0; i < REP; i++) {
+      await check('认时间 L' + level + ' 钟面和选项#' + i, async () => {
+        const st = fresh(), { api } = mkApi(level, st);
+        cap.q = null; NG.byId('clock').round(level, api);
+        const q = cap.q;
+        const ok = level === 1 ? [0] : level <= 3 ? [0, 30] : null;
+        if (q.options.length !== 3 || new Set(q.options).size !== 3 || q.options.indexOf(q.answer) < 0) throw new Error('选项不对 ' + q.options);
+        q.times.forEach(t => {
+          if (t.h < 1 || t.h > 12 || t.m < 0 || t.m > 59 || (ok ? ok.indexOf(t.m) < 0 : t.m % 5)) throw new Error('时间不合法 ' + t.h + ':' + t.m);
+        });
+        if ((level === 3) !== (q.mode === 'pick') && level < 4) throw new Error('出题方式不对 ' + q.mode);
+        if (q.mode === 'read') {
+          const hand = (c) => +/rotate\(([\d.]+)/.exec(st.querySelector('.clockbox .' + c).getAttribute('transform'))[1];
+          const eh = (q.h % 12) * 30 + q.m * 0.5, em = q.m * 6;
+          if (Math.abs(hand('cf-hour') - eh) > 0.06 || Math.abs(hand('cf-min') - em) > 0.06) throw new Error('指针角度不对 ' + q.label);
+          if (st.querySelectorAll('.choice svg').length) throw new Error('读钟面的选项不该是钟面');
+        } else {
+          if (st.querySelectorAll('.choice svg.clockface').length !== 3) throw new Error('选钟面应有 3 个钟面');
+          if (!/点/.test(st.querySelector('.bigq').textContent)) throw new Error('应写出要找的时间');
+        }
+      });
+    }
+  }
+  await check('关卡分类均衡', async () => {
+    const ids = NG.STAGES.map(s => s.id);
+    const n = ids.map(id => NG.games.filter(g => g.stage === id).length);
+    NG.games.forEach(g => { if (ids.indexOf(g.stage) < 0) throw new Error(g.id + ' 的关卡不存在'); });
+    if (Math.min.apply(null, n) < 2 || Math.max.apply(null, n) - Math.min.apply(null, n) > 1) throw new Error('每个关卡的游戏数应在 2-3 个之间且相差不超过 1 ' + n);
+  });
+
   /* ---- 4. 方块、点阵、手指、硬币 SVG 合法 ---- */
   await check('SVG 合法', async () => {
     const B = NG.blocks, parser = new DOMParser();
@@ -355,6 +471,7 @@
     const test = (name, s) => { const d = parser.parseFromString(s, 'image/svg+xml'); if (d.querySelector('parsererror')) bad.push(name); };
     for (let n = 0; n <= 20; n++) { test('stack' + n, B.stack(n, { unit: 30 })); test('dots' + n, B.dots(n)); test('fingers' + n, B.fingers(n)); }
     [1, 2, 5, 10].forEach(v => test('coin' + v, B.coin(v)));
+    for (let hh = 1; hh <= 12; hh++) [0, 5, 30, 55].forEach(mm => { test('clock' + hh + ':' + mm, B.clock(hh, mm)); test('clockmini' + hh + ':' + mm, B.clock(hh, mm, { mini: true, size: 88 })); });
     if (bad.length) throw new Error(bad.join(','));
     // 方块塔格子数 = n
     for (let n = 1; n <= 20; n++) {
@@ -475,7 +592,9 @@
       '再切一刀', '要从水果的外面，划到另一边的外面哦', '没关系，再写一次', '要一直写到终点哦', '再试一次，沿着线走哦',
       '从小圆点开始写', '回到小圆圈，沿着线走哦', '先放几个硬币吧', '放多啦，拿走一块试试', '对啦，一样大，每个小朋友一半',
       '切成了一样大的四份，每个小朋友一份', '切成了一样大的两半，每个小朋友一半', '要切成四块哦，两刀要交叉', '没有切开哦',
-      '切得不一样大，大小要一样才公平'].forEach(t => S.push(t));
+      '切得不一样大，大小要一样才公平', '你先走，三个连成一条线就赢！', '你连成三个，赢啦！', '平局，也很棒！', '这局输啦，再来一局', '再来一局，你先走！',
+      '现在几点？', '现在几点几分？'].forEach(t => S.push(t));
+    for (let hh = 1; hh <= 12; hh++) for (let mm = 0; mm < 60; mm += 5) { const w = L.clockSay(hh, mm); S.push('现在是' + w, '哪个钟是' + w + '？'); }
     for (let a = 0; a <= 20; a++) for (let b = 0; b <= 10; b++) {
       if (a + b <= 20) S.push(nz(a) + '加' + nz(b) + '等于' + nz(a + b));
       if (b <= a) S.push(nz(a) + '减' + nz(b) + '等于' + nz(a - b));

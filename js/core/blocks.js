@@ -111,5 +111,30 @@
     }
   }
 
-  NG.blocks = { color, shade, stack, dots, fingers, coin, rep };
+  // 时钟：短粗蓝色是时针，细长红色是分针。mini 只画 12/3/6/9，给小尺寸的选项用
+  function clock(hh, mm, o) {
+    o = o || {};
+    const size = o.size || 230, mini = !!o.mini;
+    let s = '<svg class="clockface" viewBox="0 0 200 200" width="' + size + '" height="' + size + '" aria-hidden="true">' +
+      '<circle cx="100" cy="100" r="95" class="cf-rim"/>';
+    for (let i = 0; i < 60; i++) {
+      const big = i % 5 === 0;
+      if (mini && !big) continue;
+      const a = i * Math.PI / 30, r1 = big ? 80 : 86, sn = Math.sin(a), cs = Math.cos(a);
+      s += '<line x1="' + (100 + r1 * sn).toFixed(1) + '" y1="' + (100 - r1 * cs).toFixed(1) + '" x2="' + (100 + 91 * sn).toFixed(1) +
+        '" y2="' + (100 - 91 * cs).toFixed(1) + '" class="cf-tick' + (big ? ' big' : '') + '"/>';
+    }
+    const ha = ((hh % 12) * 30 + mm * 0.5).toFixed(1), ma = (mm * 6).toFixed(1);
+    s += '<line x1="100" y1="100" x2="100" y2="54" class="cf-hour" transform="rotate(' + ha + ' 100 100)"/>' +
+      '<line x1="100" y1="100" x2="100" y2="26" class="cf-min" transform="rotate(' + ma + ' 100 100)"/>';
+    for (let n = 1; n <= 12; n++) {
+      if (mini && n % 3) continue;
+      const a = n * Math.PI / 6, r = 65;
+      s += '<text x="' + (100 + r * Math.sin(a)).toFixed(1) + '" y="' + (100 - r * Math.cos(a)).toFixed(1) +
+        '" dy=".35em" text-anchor="middle" class="cf-num' + (mini ? ' mini' : '') + '">' + n + '</text>';
+    }
+    return s + '<circle cx="100" cy="100" r="7" class="cf-pin"/></svg>';
+  }
+
+  NG.blocks = { color, shade, stack, dots, fingers, coin, rep, clock };
 })(typeof window !== 'undefined' ? window : globalThis);

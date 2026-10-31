@@ -14,7 +14,7 @@
   }
 
   NG.registerGame({
-    id: 'equation', stage: 6, icon: '🧮', title: '算式工坊', blurb: '图画变算式',
+    id: 'equation', stage: 4, icon: '🧮', title: '算式工坊', blurb: '图画变算式',
     round(level, api) {
       const q = L.genEquation(level);
       const eq = h('div', { class: 'equation big', html: q.mode === 'picture' ? '' : fmt(q.text) });

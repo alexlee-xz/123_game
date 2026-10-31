@@ -420,6 +420,98 @@
     return { mode: 'cut', pieces: l === 4 ? 4 : 2, guide: l === 2, shapeKey, shape, item, ideal };
   };
 
+  /* ---------- 三子棋：棋盘 9 格，0 空 / 1 小朋友 / 2 电脑 ---------- */
+  L.TTT_LINES = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
+  L.tttEmpty = (b) => { const o = []; b.forEach((v, i) => { if (!v) o.push(i); }); return o; };
+  // 结果：over 是否结束；winner 0 平局 / 1 / 2；line 连成三个的那三格
+  L.tttResult = function (b) {
+    for (let i = 0; i < L.TTT_LINES.length; i++) {
+      const ln = L.TTT_LINES[i];
+      if (b[ln[0]] && b[ln[0]] === b[ln[1]] && b[ln[0]] === b[ln[2]]) return { over: true, winner: b[ln[0]], line: ln };
+    }
+    return { over: L.tttEmpty(b).length === 0, winner: 0, line: null };
+  };
+  // who 落在哪一格能立刻连成三个（没有返回 -1）
+  L.tttFinish = function (b, who) {
+    const e = L.tttEmpty(b);
+    for (let i = 0; i < e.length; i++) {
+      const t = b.slice(); t[e[i]] = who;
+      const r = L.tttResult(t);
+      if (r.over && r.winner === who) return e[i];
+    }
+    return -1;
+  };
+  // 极大极小：turn 方落子，返回对 me 的得分（me 赢为正、越快越高；输为负；平局 0）
+  function tttScore(b, turn, me, depth) {
+    const r = L.tttResult(b);
+    if (r.over) return r.winner === me ? 10 - depth : r.winner ? depth - 10 : 0;
+    const other = turn === 1 ? 2 : 1;
+    let best = turn === me ? -99 : 99;
+    L.tttEmpty(b).forEach(i => {
+      b[i] = turn;
+      const s = tttScore(b, other, me, depth + 1);
+      b[i] = 0;
+      best = turn === me ? Math.max(best, s) : Math.min(best, s);
+    });
+    return best;
+  }
+  // 电脑（2）走哪一格：1 级乱走；2 级能赢就赢；3 级还会挡住对方；4 级不会输
+  L.tttMove = function (level, b, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    const e = L.tttEmpty(b);
+    if (!e.length) return -1;
+    if (l >= 2) { const w = L.tttFinish(b, 2); if (w >= 0) return w; }
+    if (l >= 3) { const k = L.tttFinish(b, 1); if (k >= 0) return k; }
+    if (l === 4) {
+      const t = b.slice(); let best = -99, pool = [];
+      e.forEach(i => {
+        t[i] = 2; const s = tttScore(t, 1, 2, 1); t[i] = 0;
+        if (s > best) { best = s; pool = [i]; } else if (s === best) pool.push(i);
+      });
+      return L.pick(rnd, pool);
+    }
+    return L.pick(rnd, e);
+  };
+  L.genTicTacToe = function (level, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    const mine = L.pick(rnd, L.ANIMALS);
+    return { level: l, mine, theirs: L.pick(rnd, L.ANIMALS.filter(a => a.e !== mine.e)) };
+  };
+
+  /* ---------- 认时间：时钟 ---------- */
+  const minZh = (m) => m < 10 ? '零' + ZH[m] : m < 20 ? L.numZh(m) : ZH[Math.floor(m / 10)] + '十' + (m % 10 ? ZH[m % 10] : '');
+  // 读法：3 点读“三点”、2 点读“两点”、30 分读“半”；5 分读“零五分”
+  L.clockSay = (h, m) => L.qtyZh(h) + '点' + (m === 0 ? '' : m === 30 ? '半' : minZh(m) + '分');
+  // 屏幕上写的：3点 / 3点半 / 3点10分
+  L.clockLabel = (h, m) => h + '点' + (m === 0 ? '' : m === 30 ? '半' : m + '分');
+  // 1 级整点；2 级整点/半点；3 级给时间选钟面；4 级几点几分（5 分钟一格），偶尔也选钟面
+  L.genClock = function (level, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    const mins = l === 1 ? [0] : l <= 3 ? [0, 30] : [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+    const mode = l === 3 || (l === 4 && rnd() < 0.35) ? 'pick' : 'read';
+    const h = L.randInt(rnd, 1, 12), m = L.pick(rnd, mins);
+    const hNext = h % 12 + 1, hPrev = (h + 10) % 12 + 1;
+    const T = (hh, mm) => ({ h: hh, m: mm, label: L.clockLabel(hh, mm) });
+    const answer = T(h, m);
+    let cands;
+    if (l === 1) cands = L.makeOptions(rnd, h, { min: 1, max: 12, count: 3 }).filter(x => x !== h).map(x => T(x, 0));
+    else {
+      const near = l === 4 ? T(h, (m + L.pick(rnd, [5, 55])) % 60) : T(h, 30 - m);       // 分针差一点点 / 半点和整点混淆
+      const other = T(L.pick(rnd, [hNext, hPrev]), m);                                      // 时针指错数
+      const swap = l === 4 ? T(m === 0 ? 12 : m / 5, (h % 12) * 5) : null;                  // 把时针和分针读反
+      cands = [near, other];
+      if (swap && swap.label !== answer.label && swap.label !== near.label && L.pick(rnd, [true, false])) cands = [near, swap];
+    }
+    const seen = {}; seen[answer.label] = 1;
+    cands = cands.filter(c => !seen[c.label] && (seen[c.label] = 1));
+    while (cands.length < 2) {                                                              // 保底：换个小时补齐
+      const c = T(L.randInt(rnd, 1, 12), m);
+      if (!seen[c.label]) { seen[c.label] = 1; cands.push(c); }
+    }
+    const all = L.shuffle(rnd, [answer].concat(cands.slice(0, 2)));
+    return { mode, h, m, label: answer.label, say: L.clockSay(h, m), times: all, options: all.map(t => t.label), answer: answer.label };
+  };
+
   // 挑战关：按等级混合各类题目
   L.CHALLENGE_POOLS = [
     ['match', 'merge', 'take'],

@@ -25,7 +25,7 @@
   }
 
   NG.registerGame({
-    id: 'frog', stage: 6, icon: '🐸', title: '青蛙跳跳', blurb: '在数轴上跳一跳',
+    id: 'frog', stage: 2, icon: '🐸', title: '青蛙跳跳', blurb: '在数轴上跳一跳',
     round(level, api) {
       const q = L.genFrog(level);
       const adding = q.op === 'add', steps = q.kind === 'steps';

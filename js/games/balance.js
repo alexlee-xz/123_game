@@ -20,7 +20,7 @@
   }
 
   NG.registerGame({
-    id: 'balance', stage: 3, icon: '⚖️', title: '天平', blurb: '让两边一样多',
+    id: 'balance', stage: 4, icon: '⚖️', title: '天平', blurb: '让两边一样多',
     round(level, api) {
       const q = L.genBalance(level);
       api.prompt('让天平平起来！右边还要放几块？');

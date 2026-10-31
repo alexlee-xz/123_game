@@ -272,3 +272,26 @@ svg.blk, svg.dots, svg.fingers { max-width: 100%; height: auto; }
 .numline.dense .tlabel.start, .numline.dense .tlabel.qmark, .numline.dense .tlabel.got { font-size: 32px; }
 .numline.dense .frog { font-size: 54px; }
 .numline.dense .flag { font-size: 40px; }
+
+/* ---- 三子棋 / 认时间 ---- */
+.tttlegend { font-size: 22px; font-weight: 800; }
+.tttboard { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; max-width: 330px; padding: 8px; background: #b197fc; border-radius: 22px; box-shadow: var(--shadow); }
+.tttcell { font: inherit; font-size: 52px; line-height: 1; aspect-ratio: 1; padding: 0; background: #fff; border: 0; border-radius: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+@supports (width: 1cqw) { .tttcell { font-size: clamp(34px, 14cqw, 60px); } }
+.tttcell:not(.taken):active { transform: scale(.95); background: #f3f0ff; }
+.tttcell.taken { cursor: default; }
+.tttcell.win { background: #d3f9d8; animation: pop .5s; }
+
+.clockbox { display: flex; justify-content: center; max-width: 100%; }
+.clockface { max-width: 100%; height: auto; }
+.clockface .cf-rim { fill: #fff; stroke: #f08c00; stroke-width: 6; }
+.clockface .cf-tick { stroke: #adb5bd; stroke-width: 2; }
+.clockface .cf-tick.big { stroke: #495057; stroke-width: 3.5; }
+.clockface .cf-num { font-size: 21px; font-weight: 800; fill: #343a40; }
+.clockface .cf-num.mini { font-size: 30px; }
+.clockface .cf-hour { stroke: #1971c2; stroke-width: 10; stroke-linecap: round; }
+.clockface .cf-min { stroke: #e03131; stroke-width: 5; stroke-linecap: round; }
+.clockface .cf-pin { fill: #343a40; }
+.clocklabel { font-size: 26px; font-weight: 900; white-space: nowrap; color: #1971c2; }
+.clockopts { gap: 10px; }
+.clockopts .choice { min-width: 0; min-height: 0; padding: 4px; }
