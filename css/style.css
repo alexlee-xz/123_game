@@ -307,3 +307,15 @@ svg.blk, svg.dots, svg.fingers { max-width: 100%; height: auto; }
 .sdkpad { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 .sdknum { font: inherit; font-size: 28px; font-weight: 800; width: 48px; height: 52px; border: 0; border-radius: 12px; background: #b197fc; color: #fff; cursor: pointer; }
 .rulerbox, .anglebox, .thermobox, .jugbox { text-align: center; width: 100%; max-width: 340px; margin: 0 auto; }
+.stagecard.s8 { border-color: #339af0; }
+.geobox { width: 100%; max-width: 400px; margin: 0 auto; }
+.geosvg { display: block; touch-action: manipulation; cursor: crosshair; }
+.ggrid { display: flex; flex-direction: column; gap: 4px; width: 100%; max-width: 300px; margin: 0 auto; font-weight: 800; color: #1864ab; }
+.gtop, .grow { display: flex; gap: 4px; align-items: stretch; }
+.gcorner { width: 22px; flex: none; }
+.gcols { display: flex; flex: 1; } .gcols span { flex: 1; text-align: center; }
+.grows { display: flex; flex-direction: column; width: 22px; flex: none; } .grows span { flex: 1; display: flex; align-items: center; justify-content: center; }
+.gbody { flex: 1; display: grid; gap: 3px; padding: 4px; background: #74c0fc; border-radius: 12px; }
+.ggrid.n3 .gbody { grid-template-columns: repeat(3, 1fr); } .ggrid.n4 .gbody { grid-template-columns: repeat(4, 1fr); } .ggrid.n5 .gbody { grid-template-columns: repeat(5, 1fr); }
+.gcell { font: inherit; font-size: 26px; aspect-ratio: 1; padding: 0; border: 0; border-radius: 6px; background: #fff; cursor: pointer; }
+.gcell.good { background: #b2f2bb; } .gcell.bad { background: #ffc9c9; } .gcell.hint { background: #ffe066; }

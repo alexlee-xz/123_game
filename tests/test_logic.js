@@ -581,3 +581,18 @@ test('温度计、量杯：答案对、选项互异、范围内', () => {
   } });
   assert.strictEqual(L.genThermo(4, () => 0).say, '零下九度');
 });
+
+test('地理：格子、纬线、经线、找位置的出题器', () => {
+  [1, 2, 3, 4].forEach(l => { for (let k = 0; k < 300; k++) {
+    const g = L.genGrid(l, rnd);
+    assert.ok(g.r >= 1 && g.r <= g.n && g.c >= 1 && g.c <= g.n);
+    assert.ok(g.options.includes(g.answer) && distinct(g.options) && g.options.length === 3);
+    const a = L.genLat(l, rnd), o = L.genLon(l, rnd);
+    if (a.mode === 'tap') assert.ok([-60, -30, 0, 30, 60].includes(a.target)); else assert.ok(a.options.includes(a.answer));
+    if (o.mode === 'tap') assert.ok(o.target % 30 === 0 && Math.abs(o.target) < 180); else assert.ok(o.options.includes(o.answer));
+    const p = L.genGeoPos(l, rnd);
+    if (p.mode === 'read') assert.ok(p.options.includes(p.answer) && distinct(p.options) && p.options.length === 3);
+    else assert.ok(Math.abs(p.target.lat) <= 90 && Math.abs(p.target.lon) <= 180);
+  } });
+  assert.strictEqual(L.fmtLat(-30), '南纬30°'); assert.strictEqual(L.sayLon(-60), '西经60度');
+});

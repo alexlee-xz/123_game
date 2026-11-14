@@ -629,6 +629,80 @@
     return { level: l, max, unit, value: v, uname: u, answer: v + u, say: L.numZh(v) + u, options: vals.map(x => x + u) };
   };
 
+  /* ---------- 地图与经纬度 ---------- */
+  L.fmtLat = (v) => v === 0 ? '赤道 0°' : (v > 0 ? '北纬' : '南纬') + Math.abs(v) + '°';
+  L.fmtLon = (v) => v === 0 ? '本初子午线 0°' : v === 180 || v === -180 ? '180°' : (v > 0 ? '东经' : '西经') + Math.abs(v) + '°';
+  L.sayLat = (v) => v === 0 ? '赤道' : (v > 0 ? '北纬' : '南纬') + Math.abs(v) + '度';
+  L.sayLon = (v) => v === 0 ? '本初子午线' : (v > 0 ? '东经' : '西经') + Math.abs(v) + '度';
+  L.GEO_CITIES = [
+    { name: '北京', e: '🏯', lat: 40, lon: 116 }, { name: '纽约', e: '🗽', lat: 41, lon: -74 },
+    { name: '悉尼', e: '🦘', lat: -34, lon: 151 }, { name: '开罗', e: '🔺', lat: 30, lon: 31 },
+    { name: '里约', e: '🏖️', lat: -23, lon: -43 }, { name: '伦敦', e: '🎡', lat: 51, lon: 0 },
+    { name: '南极', e: '🐧', lat: -90, lon: 0 }
+  ];
+  const near30 = (v) => Math.round(v / 30) * 30;
+  // 格子找宝藏：1-2 级点格子；3 级读“第几行第几列”；4 级点在线的交叉点上，读“横线几、竖线几”
+  L.genGrid = function (level, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    const n = l === 1 ? 3 : l < 4 ? 4 : 5;
+    const r = L.randInt(rnd, 1, n), c = L.randInt(rnd, 1, n);
+    const mode = l <= 2 ? 'tap' : 'read';
+    const fmt = (rr, cc) => l === 4 ? '横线' + rr + '、竖线' + cc : '第' + rr + '行第' + cc + '列';
+    const pool = [];
+    for (let a = 1; a <= n; a++) for (let b = 1; b <= n; b++) if (a !== r || b !== c) pool.push([a, b]);
+    const swap = r !== c ? [[c, r]] : [];
+    const rest = L.shuffle(rnd, pool.filter(x => !swap.some(y => y[0] === x[0] && y[1] === x[1])));
+    const wrong = swap.concat(rest).slice(0, 2);
+    const vals = L.shuffle(rnd, wrong.map(x => fmt(x[0], x[1])).concat([fmt(r, c)]));
+    return { level: l, n, r, c, mode, onLines: l === 4, say: fmt(r, c), answer: fmt(r, c), options: vals, item: L.pick(rnd, ['💎', '🏆', '🐠', '🍎', '⭐']) };
+  };
+  // 认纬线：1 点赤道；2 选南北半球；3 点指定纬线（有标注）；4 点指定纬线（无标注）
+  L.genLat = function (level, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    if (l === 1) return { level: l, mode: 'tap', target: 0, labels: false };
+    if (l === 2) {
+      const north = rnd() < 0.5;
+      return { level: l, mode: 'choice', north, ask: north ? '北半球' : '南半球', answer: north ? '赤道上面' : '赤道下面', options: ['赤道上面', '赤道下面'], labels: true };
+    }
+    const target = L.pick(rnd, [-60, -30, 30, 60]);
+    return { level: l, mode: 'tap', target, labels: l === 3 };
+  };
+  // 认经线：1 点本初子午线；2 选东西半球；3 点指定经线（有标注）；4 点指定经线（无标注）
+  L.genLon = function (level, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    if (l === 1) return { level: l, mode: 'tap', target: 0, labels: false };
+    if (l === 2) {
+      const east = rnd() < 0.5;
+      return { level: l, mode: 'choice', east, ask: east ? '东经' : '西经', answer: east ? '本初子午线右边' : '本初子午线左边', options: ['本初子午线左边', '本初子午线右边'], labels: true };
+    }
+    const target = L.pick(rnd, [-150, -120, -90, -60, -30, 30, 60, 90, 120, 150]);
+    return { level: l, mode: 'tap', target, labels: l === 3 };
+  };
+  // 找位置：1-2 级看城市，读它的经纬度；3 级给城市和经纬度，点在地图上；4 级只给经纬度（线的交叉点）
+  L.genGeoPos = function (level, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    const cities = L.GEO_CITIES.filter(c => c.name !== '南极');
+    const city = L.pick(rnd, cities);
+    const q = { level: l, city };
+    if (l <= 2) {
+      const mk = (c) => ({ lat: near30(c.lat), lon: near30(c.lon) });
+      const t = mk(city);
+      const text = (v) => L.fmtLat(v.lat).replace('赤道 ', '赤道') + '，' + L.fmtLon(v.lon).replace('本初子午线 ', '本初子午线');
+      const others = L.shuffle(rnd, cities.filter(c => c !== city).map(mk).filter(v => v.lat !== t.lat || v.lon !== t.lon));
+      const fixed = [{ lat: -t.lat || 0, lon: t.lon }, { lat: t.lat, lon: -t.lon || 0 }].filter(v => v.lat !== t.lat || v.lon !== t.lon);
+      const pool = (l === 1 ? others.concat(fixed) : fixed.concat(others)).filter((v, i, a) => a.findIndex(w => w.lat === v.lat && w.lon === v.lon) === i);
+      const w = pool.slice(0, 2);
+      q.mode = 'read'; q.target = t; q.answer = text(t); q.options = L.shuffle(rnd, w.map(text).concat([text(t)]));
+      q.say = L.sayLat(t.lat) + '，' + L.sayLon(t.lon);
+    } else if (l === 3) {
+      q.mode = 'tap'; q.target = { lat: city.lat, lon: city.lon }; q.tol = 18; q.say = L.sayLat(city.lat) + '，' + L.sayLon(city.lon);
+    } else {
+      const lat = L.pick(rnd, [-60, -30, 0, 30, 60]), lon = L.pick(rnd, [-120, -90, -60, -30, 0, 30, 60, 90, 120]);
+      q.mode = 'tap'; q.target = { lat, lon }; q.tol = 15; q.say = L.sayLat(lat) + '，' + L.sayLon(lon); q.city = null;
+    }
+    return q;
+  };
+
   /* ---------- 认时间：时钟 ---------- */
   const minZh = (m) => m < 10 ? '零' + ZH[m] : m < 20 ? L.numZh(m) : ZH[Math.floor(m / 10)] + '十' + (m % 10 ? ZH[m % 10] : '');
   // 读法：3 点读“三点”、2 点读“两点”、30 分读“半”；5 分读“零五分”
