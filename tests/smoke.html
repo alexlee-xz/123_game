@@ -599,6 +599,24 @@
   out.push((fails ? 'FAILED ' + fails : 'ALL OK') + '  (passes ' + passes + ')');
   document.getElementById('out').textContent = out.join('\n');
   if (COLLECT) {
+    // 后加的小游戏：多出几次题，点正确答案，记下题目和夸奖台词
+    const mapOpts = [], omap = NG.geo.map;
+    NG.geo.map = function (o) { mapOpts.push(o); return omap.apply(this, arguments); };
+    for (const id of ['ruler', 'angle', 'thermo', 'jug', 'geogrid', 'geolat', 'geolon', 'geopos', 'speedrace', 'speedsec', 'speedfar', 'speedtime', 'sudoku']) {
+      for (let level = 1; level <= 4; level++) for (let i = 0; i < REP * (/^speed/.test(id) ? 8 : 1); i++) {   // 速度类的题（动物×格数×秒数）组合多
+        const st = fresh(), { api } = mkApi(level, st);
+        cap.q = null; mapOpts.length = 0;
+        NG.byId(id).round(level, api);
+        const q = cap.q, row = st.querySelector('.choices');
+        if (row) click(row.children[q.options.indexOf(q.answer)]);
+        else if (id === 'geogrid') click(st.querySelectorAll('.gcell')[(q.r - 1) * q.n + q.c - 1]);
+        else if (id === 'geolat') mapOpts[0].onTap(q.target, 0);
+        else if (id === 'geolon') mapOpts[0].onTap(0, q.target);
+        else if (id === 'geopos') mapOpts[0].onTap(q.target.lat, q.target.lon);
+      }
+    }
+    NG.geo.map = omap;
+    ['全部填对啦，真棒！', '这个数字这一行、这一列或这个框里已经有啦，再想一想'].forEach(noteSay);
     // 游戏里不容易点到、或组合很多的台词，直接按规则列举
     const nz = L.numZh, qz = L.qtyZh, S = [];
     for (let n = 0; n <= 20; n++) S.push(nz(n));

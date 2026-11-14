@@ -2,7 +2,7 @@
  * 文件名是台词内容的哈希，同一个名字的内容基本不会变；万一重新生成了语音，把下面的 CACHE 版本号加一即可。
  * 其它文件（页面、脚本）不经过这里，照常由浏览器按 ?v= 版本号处理。 */
 'use strict';
-const CACHE = 'ng-voice-v1';
+const CACHE = 'ng-voice-v2';
 const CLIP = /\/audio\/v\/[0-9a-f]+\.mp3$/;
 
 self.addEventListener('install', () => self.skipWaiting());

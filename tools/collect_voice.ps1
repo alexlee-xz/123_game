@@ -8,6 +8,7 @@ $root = Split-Path $PSScriptRoot -Parent
 $page = (Resolve-Path (Join-Path $root "tests\smoke.html")).Path
 $url = "file:///" + ($page -replace '\\', '/') + "?collect=$Reps"
 $prof = Join-Path $env:TEMP ("123game_edge_" + [guid]::NewGuid().ToString("N"))
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8     # Edge 输出的是 UTF-8；不设的话中文台词会按系统代码页解码成乱码
 $dom = & $edge --headless --disable-gpu --no-first-run --user-data-dir=$prof --window-size="360,780" --virtual-time-budget=$Budget --dump-dom $url 2>$null | Out-String
 Remove-Item $prof -Recurse -Force -ErrorAction SilentlyContinue
 if ($dom -match '(?s)<pre id="out">(.*?)</pre>') { [System.Net.WebUtility]::HtmlDecode($Matches[1]).Split("`n") | Select-Object -Last 3 }
