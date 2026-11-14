@@ -703,6 +703,61 @@
     return q;
   };
 
+  /* ---------- 速度：每秒走几格（跑道上一格 = 1 米） ---------- */
+  const twoAnimals = (rnd) => { const a = L.pick(rnd, L.ANIMALS); return [a, L.pick(rnd, L.ANIMALS.filter(x => x.e !== a.e))]; };
+  // 谁快谁慢：同时出发，时间一样长。1-2 级速度差得多/少；3 级问谁走得远；4 级时间不同，要比每秒走几格
+  L.genRace = function (level, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    const [A, B] = twoAnimals(rnd);
+    let va, vb, ta, tb;
+    if (l === 1) { va = L.randInt(rnd, 1, 2); vb = va + L.randInt(rnd, 2, 3); }
+    else if (l === 2) { va = L.randInt(rnd, 2, 4); vb = va + 1; }
+    else if (l === 3) { va = L.randInt(rnd, 2, 5); vb = va + L.randInt(rnd, 1, 2); }
+    else { va = L.randInt(rnd, 2, 4); vb = va + 1; }
+    if (rnd() < 0.5) { const t = va; va = vb; vb = t; }
+    ta = tb = l === 1 ? 3 : L.randInt(rnd, 2, 4);
+    if (l === 4) { ta = L.randInt(rnd, 2, 5); tb = L.randInt(rnd, 2, 5); }
+    const da = va * ta, db = vb * tb;
+    const ask = l === 3 ? 'far' : 'fast';
+    const win = (ask === 'far' ? da > db : va > vb) ? A : B;
+    return { level: l, A, B, va, vb, ta, tb, da, db, ask, cells: Math.max(da, db) + 1, answer: win.name, options: [A.name, B.name] };
+  };
+  // 每秒走几格：看动画里走了 d 格、用了 t 秒，求速度。1 级 1 秒；2 级 2 秒；3 级 3 秒；4 级最多 5 秒
+  L.genSpeedSec = function (level, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    const t = l === 1 ? 1 : l === 2 ? 2 : l === 3 ? 3 : L.randInt(rnd, 2, 5);
+    const v = L.randInt(rnd, 1, l === 4 ? 6 : 4), d = v * t, a = L.pick(rnd, L.ANIMALS);
+    return { level: l, animal: a, v, t, d, cells: d + 1, options: L.makeOptions(rnd, v, { min: 1, max: 8, count: 3 }).map(String), answer: String(v) };
+  };
+  // 同样路程比时间：1-2 级问谁先到；3-4 级问各用几秒（路程 = 速度 x 时间，倒着想）
+  L.genSpeedTime = function (level, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    const [A, B] = twoAnimals(rnd);
+    const slow = L.randInt(rnd, 1, 2), mul = L.randInt(rnd, 2, 3), fast = slow * mul;
+    const dist = fast * (l >= 3 ? L.randInt(rnd, 1, 2) : 1);
+    const aFast = rnd() < 0.5;
+    const va = aFast ? fast : slow, vb = aFast ? slow : fast;
+    const q = { level: l, A, B, va, vb, D: dist, ta: dist / va, tb: dist / vb, cells: dist + 1 };
+    if (l <= 2) { q.mode = 'who'; q.answer = (aFast ? A : B).name; q.options = [A.name, B.name]; }
+    else {
+      q.mode = 'time'; q.who = rnd() < 0.5 ? A : B; q.t = q.who === A ? q.ta : q.tb;
+      q.answer = String(q.t); q.options = L.makeOptions(rnd, q.t, { min: 1, max: Math.max(q.ta, q.tb) + 2, count: 3 }).map(String);
+    }
+    return q;
+  };
+  // 走多远：已知每秒走几格和时间，求走了几格。1 级 1-2 秒；2 级到 4 秒；3 级加“再走几秒”；4 级先走再变速
+  L.genSpeedFar = function (level, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    const a = L.pick(rnd, L.ANIMALS), v = L.randInt(rnd, 2, l === 1 ? 3 : 5);
+    const t = L.randInt(rnd, 2, l === 1 ? 3 : 4);
+    let d, parts = null;
+    if (l === 4) { const v2 = L.randInt(rnd, 1, 5), t2 = L.randInt(rnd, 1, 3); parts = [{ v, t }, { v: v2, t: t2 }]; d = v * t + v2 * t2; }
+    else d = v * t;
+    const max = Math.max(12, d + 4);
+    const vals = L.makeOptions(rnd, d, { min: 1, max, count: 3 }).map(String);
+    return { level: l, animal: a, v, t, d, parts, cells: d + 1, options: vals, answer: String(d) };
+  };
+
   /* ---------- 认时间：时钟 ---------- */
   const minZh = (m) => m < 10 ? '零' + ZH[m] : m < 20 ? L.numZh(m) : ZH[Math.floor(m / 10)] + '十' + (m % 10 ? ZH[m % 10] : '');
   // 读法：3 点读“三点”、2 点读“两点”、30 分读“半”；5 分读“零五分”

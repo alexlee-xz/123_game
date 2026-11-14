@@ -10,7 +10,8 @@
     { id: 5, title: '生活里的数学', icon: '🛒', blurb: '买东西、看时钟、分水果' },
     { id: 6, title: '动脑小挑战', icon: '🏆', blurb: '下三子棋、玩数独、闯大关' },
     { id: 7, title: '量一量', icon: '📏', blurb: '尺子、量角器、温度计、量杯' },
-    { id: 8, title: '认识地球', icon: '🌍', blurb: '格子、纬线、经线、找位置' }
+    { id: 8, title: '认识地球', icon: '🌍', blurb: '格子、纬线、经线、找位置' },
+    { id: 9, title: '快和慢', icon: '🏃', blurb: '比快慢、算速度、走多远' }
   ];
   NG.games = [];
   NG.registerGame = (g) => { NG.games.push(g); };

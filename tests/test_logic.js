@@ -596,3 +596,22 @@ test('地理：格子、纬线、经线、找位置的出题器', () => {
   } });
   assert.strictEqual(L.fmtLat(-30), '南纬30°'); assert.strictEqual(L.sayLon(-60), '西经60度');
 });
+
+test('速度：出题器答案正确、选项互异', () => {
+  [1, 2, 3, 4].forEach(l => { for (let k = 0; k < 300; k++) {
+    const r = L.genRace(l, rnd);
+    assert.notStrictEqual(r.va * r.ta === r.vb * r.tb && r.ask === 'far', true);
+    assert.notStrictEqual(r.va, r.vb);
+    const win = r.ask === 'far' ? (r.da > r.db ? r.A : r.B) : (r.va > r.vb ? r.A : r.B);
+    assert.strictEqual(win.name, r.answer); assert.notStrictEqual(r.A.name, r.B.name);
+    if (r.ask === 'fast') assert.ok(r.va > r.vb ? true : r.vb > r.va);
+    const s = L.genSpeedSec(l, rnd);
+    assert.strictEqual(s.v * s.t, s.d); assert.ok(s.options.includes(s.answer) && distinct(s.options));
+    const t = L.genSpeedTime(l, rnd);
+    assert.ok(Number.isInteger(t.ta) && Number.isInteger(t.tb) && t.ta !== t.tb);
+    assert.ok(t.options.includes(t.answer) && distinct(t.options));
+    if (t.mode === 'who') assert.strictEqual(t.answer, (t.ta < t.tb ? t.A : t.B).name);
+    const f = L.genSpeedFar(l, rnd);
+    assert.ok(f.options.includes(f.answer) && distinct(f.options) && f.cells === f.d + 1);
+  } });
+});

@@ -319,3 +319,12 @@ svg.blk, svg.dots, svg.fingers { max-width: 100%; height: auto; }
 .ggrid.n3 .gbody { grid-template-columns: repeat(3, 1fr); } .ggrid.n4 .gbody { grid-template-columns: repeat(4, 1fr); } .ggrid.n5 .gbody { grid-template-columns: repeat(5, 1fr); }
 .gcell { font: inherit; font-size: 26px; aspect-ratio: 1; padding: 0; border: 0; border-radius: 6px; background: #fff; cursor: pointer; }
 .gcell.good { background: #b2f2bb; } .gcell.bad { background: #ffc9c9; } .gcell.hint { background: #ffe066; }
+.stagecard.s9 { border-color: #ff6b6b; }
+.trackbox { width: 100%; max-width: 400px; margin: 0 auto; position: relative; }
+.tklabel { font-size: 15px; font-weight: 800; margin: 6px 0 2px; color: #495057; }
+.tklane { position: relative; height: 44px; background: #e9f7ef repeating-linear-gradient(90deg, transparent 0, transparent calc(100% / var(--n, 1) - 1px), #b2dfc0 calc(100% / var(--n, 1) - 1px), #b2dfc0 calc(100% / var(--n, 1))); border-radius: 10px; overflow: hidden; }
+.tkanimal { position: absolute; top: 4px; font-size: 32px; line-height: 1; }
+.tknums { position: relative; height: 18px; font-size: 11px; color: #495057; } .tknums span { position: absolute; transform: translateX(2px); }
+.tkbar { display: flex; gap: 12px; align-items: center; justify-content: center; margin: 6px 0; }
+.gobtn { font: inherit; font-size: 20px; font-weight: 800; padding: 8px 18px; border: 0; border-radius: 14px; background: #ff922b; color: #fff; cursor: pointer; }
+.tkclock { font-size: 18px; font-weight: 800; color: #495057; }
