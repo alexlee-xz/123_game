@@ -478,6 +478,45 @@
     return { level: l, mine, theirs: L.pick(rnd, L.ANIMALS.filter(a => a.e !== mine.e)) };
   };
 
+  /* ---------- 数独：1-3 级 4x4（2x2 宫），4 级 6x6（2x3 宫）；题目保证唯一解 ---------- */
+  function sdkCount(g, n, bh, bw, limit) {
+    const i = g.indexOf(0);
+    if (i < 0) return 1;
+    const r = Math.floor(i / n), c = i % n; let cnt = 0;
+    for (let v = 1; v <= n && cnt < limit; v++) {
+      let ok = true;
+      for (let k = 0; k < n && ok; k++) if (g[r * n + k] === v || g[k * n + c] === v) ok = false;
+      const r0 = r - r % bh, c0 = c - c % bw;
+      for (let a = 0; a < bh && ok; a++) for (let b = 0; b < bw; b++) if (g[(r0 + a) * n + c0 + b] === v) { ok = false; break; }
+      if (!ok) continue;
+      g[i] = v; cnt += sdkCount(g, n, bh, bw, limit - cnt); g[i] = 0;
+    }
+    return cnt;
+  }
+  L.sdkCount = (g, n, bh, bw, limit) => sdkCount(g.slice(), n, bh, bw, limit || 2);
+  L.genSudoku = function (level, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    const n = l === 4 ? 6 : 4, bh = 2, bw = n / 2, blanks = [4, 6, 8, 14][l - 1];
+    const sol = [];
+    const bandPerm = L.shuffle(rnd, n === 4 ? [0, 1] : [0, 1, 2]);   // 行带的顺序
+    const rows = [];
+    bandPerm.forEach(bd => L.shuffle(rnd, [0, 1]).forEach(k => rows.push(bd * 2 + k)));
+    const stacks = L.shuffle(rnd, n === 4 ? [0, 1] : [0, 1]);
+    const cols = [];
+    stacks.forEach(sk => L.shuffle(rnd, Array.from({ length: bw }, (_, k) => k)).forEach(k => cols.push(sk * bw + k)));
+    const sym = L.shuffle(rnd, Array.from({ length: n }, (_, k) => k + 1));
+    const base = (r, c) => (bw * (r % bh) + Math.floor(r / bh) + c) % n;
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) sol.push(sym[base(rows[r], cols[c])]);
+    const puz = sol.slice();
+    const order = L.shuffle(rnd, Array.from({ length: n * n }, (_, k) => k));
+    let removed = 0;
+    for (let k = 0; k < order.length && removed < blanks; k++) {
+      const i = order[k], keep = puz[i]; puz[i] = 0;
+      if (sdkCount(puz.slice(), n, bh, bw, 2) === 1) removed++; else puz[i] = keep;
+    }
+    return { level: l, n, bh, bw, solution: sol, puzzle: puz };
+  };
+
   /* ---------- 认时间：时钟 ---------- */
   const minZh = (m) => m < 10 ? '零' + ZH[m] : m < 20 ? L.numZh(m) : ZH[Math.floor(m / 10)] + '十' + (m % 10 ? ZH[m % 10] : '');
   // 读法：3 点读“三点”、2 点读“两点”、30 分读“半”；5 分读“零五分”

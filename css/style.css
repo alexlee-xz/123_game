@@ -294,4 +294,14 @@ svg.blk, svg.dots, svg.fingers { max-width: 100%; height: auto; }
 .clockface .cf-pin { fill: #343a40; }
 .clocklabel { font-size: 26px; font-weight: 900; white-space: nowrap; color: #1971c2; }
 .clockopts { gap: 10px; }
-.clockopts .choice { min-width: 0; min-height: 0; padding: 4px; }
+.clockopts .choice { min-width: 0; min-height: 0; padding: 4px; }.sdkboard { display: grid; gap: 2px; width: 100%; max-width: 330px; padding: 6px; background: #5c4a9c; border-radius: 18px; box-shadow: var(--shadow); }
+.sdkboard.n4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.sdkboard.n6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.sdkcell { font: inherit; font-size: 30px; font-weight: 800; aspect-ratio: 1; padding: 0; background: #fff; border: 0; border-radius: 6px; cursor: pointer; color: #5c4a9c; display: flex; align-items: center; justify-content: center; }
+.sdkcell.given { background: #e9e3ff; color: #333; cursor: default; }
+.sdkcell.rb { margin-right: 4px; }
+.sdkcell.bb { margin-bottom: 4px; }
+.sdkcell.sel { background: #ffe066; }
+.sdkcell.shake { animation: shake .4s; }
+.sdkpad { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.sdknum { font: inherit; font-size: 28px; font-weight: 800; width: 48px; height: 52px; border: 0; border-radius: 12px; background: #b197fc; color: #fff; cursor: pointer; }

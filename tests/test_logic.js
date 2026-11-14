@@ -514,3 +514,19 @@ test('贴纸全部收完后不再重复发放', () => {
 });
 
 console.log('\n' + passed + ' 项通过' + (process.exitCode ? '，有失败' : ''));
+
+test('数独：解合法、题目唯一解', () => {
+  [1, 2, 3, 4].forEach(l => {
+    for (let t = 0; t < 20; t++) {
+      const q = L.genSudoku(l, rnd), n = q.n;
+      assert.strictEqual(L.sdkCount(q.solution, n, q.bh, q.bw), 1);
+      assert.strictEqual(L.sdkCount(q.puzzle, n, q.bh, q.bw), 1);
+      assert.ok(q.puzzle.filter(x => !x).length >= [4, 6, 8, 12][l - 1]);
+      q.puzzle.forEach((v, i) => { if (v) assert.strictEqual(v, q.solution[i]); });
+      for (let k = 0; k < n; k++) {
+        assert.ok(distinct(q.solution.filter((_, i) => Math.floor(i / n) === k)));
+        assert.ok(distinct(q.solution.filter((_, i) => i % n === k)));
+      }
+    }
+  });
+});
