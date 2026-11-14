@@ -305,3 +305,4 @@ svg.blk, svg.dots, svg.fingers { max-width: 100%; height: auto; }
 .sdkcell.shake { animation: shake .4s; }
 .sdkpad { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 .sdknum { font: inherit; font-size: 28px; font-weight: 800; width: 48px; height: 52px; border: 0; border-radius: 12px; background: #b197fc; color: #fff; cursor: pointer; }
+.rulerbox, .anglebox { width: 100%; max-width: 340px; margin: 0 auto; }

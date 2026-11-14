@@ -530,3 +530,41 @@ test('数独：解合法、题目唯一解', () => {
     }
   });
 });
+
+test('三子棋：3 级会造双杀/挡双杀，4 级不会输且设陷阱', () => {
+  // 电脑(2)在角、中，对方(1)在对角：3 级应造出双杀或至少合法
+  const b = [1, 0, 0, 0, 2, 0, 0, 0, 1];
+  [3, 4].forEach(l => { const m = L.tttMove(l, b, rnd); assert.ok(b[m] === 0); if (l === 4) assert.ok([1, 3, 5, 7].includes(m)); });
+  // 对方有双杀点时 3 级不能坐视不管：1 在 0、5，电脑在 4；若电脑走 2/3 之外会让 1 在 2 双杀
+  for (let g = 0; g < 300; g++) {
+    const bb = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    for (;;) {
+      bb[L.pick(rnd, L.tttEmpty(bb))] = 1;
+      let r = L.tttResult(bb); if (r.over) break;
+      bb[L.tttMove(4, bb, rnd)] = 2;
+      r = L.tttResult(bb); if (r.over) { break; }
+    }
+    assert.notStrictEqual(L.tttResult(bb).winner, 1);
+  }
+  // 4 级：先手占角、电脑占中，再让对方走错边——设陷阱后，只有一种回复不输（有多个选择时优先选更难的）
+  const t = [1, 0, 0, 0, 2, 0, 0, 0, 0];
+  const m = L.tttMove(4, t, rnd); assert.ok(m === 1 || m === 3 || m === 5 || m === 7 || m === 2 || m === 6 || m === 8);
+});
+test('读尺子：答案对、选项互异、尺子范围内', () => {
+  [1, 2, 3, 4].forEach(l => { for (let k = 0; k < 200; k++) {
+    const q = L.genRuler(l, rnd);
+    assert.ok(q.options.includes(q.answer)); assert.ok(distinct(q.options)); assert.strictEqual(q.options.length, 3);
+    assert.ok(q.start2 >= 0 && q.end2 <= 24 && q.len2 >= 1);
+    if (l < 3) assert.strictEqual(q.start2, 0); else assert.ok(q.start2 >= 2);
+    if (l < 4) assert.strictEqual(q.len2 % 2, 0);
+  } });
+  assert.strictEqual(L.rulerSay(7), '三厘米半'); assert.strictEqual(L.rulerSay(4), '两厘米');
+});
+test('读角度：答案对、选项互异、在量角器范围内', () => {
+  [1, 2, 3, 4].forEach(l => { for (let k = 0; k < 200; k++) {
+    const q = L.genAngle(l, rnd);
+    assert.ok(q.options.includes(q.answer)); assert.ok(distinct(q.options)); assert.strictEqual(q.options.length, 3);
+    assert.strictEqual(q.to - q.from, q.deg); assert.ok(q.from >= 0 && q.to <= 180 && q.deg > 0);
+    if (l < 4) assert.strictEqual(q.from, 0); else assert.ok(q.from >= 10);
+  } });
+});

@@ -7,8 +7,8 @@
     { id: 2, title: '数字的样子', icon: '✏️', blurb: '写一写、跳一跳、凑十' },
     { id: 3, title: '合体和分身', icon: '🧱', blurb: '合起来、拿走、上下车' },
     { id: 4, title: '等号和算式', icon: '⚖️', blurb: '天平、拆数、写算式' },
-    { id: 5, title: '生活里的数学', icon: '🛒', blurb: '买东西、看时钟、分水果' },
-    { id: 6, title: '动脑小挑战', icon: '🏆', blurb: '下三子棋、玩数独、闯大关' }
+    { id: 5, title: '生活里的数学', icon: '🛒', blurb: '买东西、看时钟、量长度' },
+    { id: 6, title: '动脑小挑战', icon: '🏆', blurb: '下三子棋、读角度、玩数独、闯大关' }
   ];
   NG.games = [];
   NG.registerGame = (g) => { NG.games.push(g); };

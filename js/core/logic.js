@@ -455,7 +455,23 @@
     });
     return best;
   }
-  // 电脑（2）走哪一格：1 级乱走；2 级能赢就赢；3 级还会挡住对方；4 级不会输
+  // 能同时造出两条“再下一子就赢”的线（双杀）的格子：对方只能挡一条
+  function tttFork(b, who) {
+    const out = [];
+    L.tttEmpty(b).forEach(i => {
+      const t = b.slice(); t[i] = who;
+      let threats = 0;
+      L.TTT_LINES.forEach(ln => {
+        const cs = ln.map(k => t[k]);
+        if (cs.filter(v => v === who).length === 2 && cs.filter(v => v === 0).length === 1) threats++;
+      });
+      if (threats >= 2) out.push(i);
+    });
+    return out;
+  }
+  // 电脑（2）走哪一格：
+  //   1 级乱走；2 级能赢就赢；3 级再加上挡住对方、造双杀、挡住对方的双杀、先占中间和角；
+  //   4 级 = 完美极大极小 + “设陷阱”：在所有不会输的走法里，挑一步让对方可能走错的回复最多的（小朋友一走错就输）
   L.tttMove = function (level, b, rnd) {
     rnd = rnd || Math.random; const l = lv(level);
     const e = L.tttEmpty(b);
@@ -468,7 +484,39 @@
         t[i] = 2; const s = tttScore(t, 1, 2, 1); t[i] = 0;
         if (s > best) { best = s; pool = [i]; } else if (s === best) pool.push(i);
       });
+      if (pool.length > 1) {
+        let top = -1, tops = [];
+        pool.forEach(i => {
+          t[i] = 2;
+          let traps = 0;
+          L.tttEmpty(t).forEach(j => {
+            t[j] = 1;
+            if (tttScore(t, 2, 2, 2) > best) traps++;       // 对方这样回复是错招（对电脑更有利）
+            t[j] = 0;
+          });
+          t[i] = 0;
+          if (traps > top) { top = traps; tops = [i]; } else if (traps === top) tops.push(i);
+        });
+        pool = tops;
+      }
       return L.pick(rnd, pool);
+    }
+    if (l === 3) {
+      const f = tttFork(b, 2); if (f.length) return L.pick(rnd, f);
+      const df = tttFork(b, 1);
+      if (df.length) {
+        // 对方有双杀点：自己先造一个“逼对方应一手”的威胁，不行就直接占住对方的双杀点
+        const forcing = e.filter(i => {
+          const t = b.slice(); t[i] = 2;
+          const w = L.tttFinish(t, 2);
+          return w >= 0 && df.indexOf(w) < 0;
+        });
+        if (forcing.length) return L.pick(rnd, forcing);
+        return L.pick(rnd, df);
+      }
+      if (!b[4]) return 4;
+      const corners = [0, 2, 6, 8].filter(i => !b[i]);
+      if (corners.length) return L.pick(rnd, corners);
     }
     return L.pick(rnd, e);
   };
@@ -515,6 +563,41 @@
       if (sdkCount(puz.slice(), n, bh, bw, 2) === 1) removed++; else puz[i] = keep;
     }
     return { level: l, n, bh, bw, solution: sol, puzzle: puz };
+  };
+
+  /* ---------- 读尺子：量物体有几厘米 ---------- */
+  // len2、start2 用“半厘米”为单位（整数），这样 3.5 厘米就是 7
+  L.rulerLabel = (v2) => (v2 % 2 ? (v2 / 2).toFixed(1) : String(v2 / 2)) + '厘米';
+  L.rulerSay = (v2) => v2 % 2 ? L.qtyZh(Math.floor(v2 / 2)) + '厘米半' : L.qtyZh(v2 / 2) + '厘米';
+  // 1 级从 0 开始量，1-6 厘米；2 级 1-10 厘米；3 级物体不从 0 开始，要用右边的数减左边的数；4 级长度还会带半厘米
+  L.genRuler = function (level, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    const maxLen = [6, 10, 8, 9][l - 1];
+    let len2 = 2 * L.randInt(rnd, l === 3 ? 2 : 1, maxLen), start2 = 0;
+    if (l === 4) len2 = L.randInt(rnd, 3, 2 * maxLen - 1);
+    if (l >= 3) start2 = 2 * L.randInt(rnd, 1, Math.floor((24 - len2) / 2));
+    const end2 = start2 + len2, step = l === 4 ? 1 : 2;
+    const cand = [len2 - step, len2 + step, len2 + 2 * step];
+    if (l >= 3) cand.push(end2);                           // 只读右边的数
+    const wrong = L.shuffle(rnd, cand.filter((v, i, a) => v >= step && v !== len2 && v <= 24 && a.indexOf(v) === i)).slice(0, 2);
+    const vals = L.shuffle(rnd, wrong.concat([len2]));
+    return { level: l, len2, start2, end2, answer: L.rulerLabel(len2), say: L.rulerSay(len2), options: vals.map(L.rulerLabel) };
+  };
+
+  /* ---------- 读角度：量角器 ---------- */
+  // 1 级 30 的倍数；2 级 10 的倍数；3 级 5 的倍数，干扰项含“读错内外圈”的补角；4 级角不从 0 开始，要用两个读数相减
+  L.genAngle = function (level, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    const unit = [30, 10, 5, 10][l - 1];
+    let deg, from = 0;
+    if (l === 4) { deg = 10 * L.randInt(rnd, 2, 12); from = 10 * L.randInt(rnd, 1, (170 - deg) / 10); }
+    else deg = unit * L.randInt(rnd, 1, Math.floor(170 / unit));
+    const to = from + deg;
+    const step = unit === 30 ? 30 : 10;
+    const cand = [deg - step, deg + step, 180 - deg, to];
+    const wrong = L.shuffle(rnd, cand.filter(v => v > 0 && v < 180 && v !== deg && v % unit === 0)).filter((v, i, a) => a.indexOf(v) === i).slice(0, 2);
+    const vals = L.shuffle(rnd, wrong.concat([deg]));
+    return { level: l, deg, from, to, answer: deg + '°', say: L.numZh(deg) + '度', options: vals.map(v => v + '°') };
   };
 
   /* ---------- 认时间：时钟 ---------- */
