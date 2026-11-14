@@ -231,6 +231,7 @@ svg.blk, svg.dots, svg.fingers { max-width: 100%; height: auto; }
 
 /* ---- 青蛙跳跳 / 算式工坊 / 切水果 ---- */
 .stagecard.s6 { border-color: #20c997; }
+.stagecard.s7 { border-color: #f59f00; }
 .frogwrap { width: 100%; max-width: 440px; background: #e7f5ff; border-radius: 22px; box-shadow: var(--shadow); padding: 6px 4px 2px; }
 .numline { width: 100%; height: auto; display: block; overflow: visible; }
 .numline .axis { stroke: #495057; stroke-width: 4; stroke-linecap: round; }
@@ -305,4 +306,4 @@ svg.blk, svg.dots, svg.fingers { max-width: 100%; height: auto; }
 .sdkcell.shake { animation: shake .4s; }
 .sdkpad { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 .sdknum { font: inherit; font-size: 28px; font-weight: 800; width: 48px; height: 52px; border: 0; border-radius: 12px; background: #b197fc; color: #fff; cursor: pointer; }
-.rulerbox, .anglebox { width: 100%; max-width: 340px; margin: 0 auto; }
+.rulerbox, .anglebox, .thermobox, .jugbox { text-align: center; width: 100%; max-width: 340px; margin: 0 auto; }

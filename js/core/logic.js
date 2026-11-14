@@ -600,6 +600,35 @@
     return { level: l, deg, from, to, answer: deg + '°', say: L.numZh(deg) + '度', options: vals.map(v => v + '°') };
   };
 
+  /* ---------- 看温度计：读出几度（红柱的顶端） ---------- */
+  // 1 级 10 的倍数（0-40）；2 级 5 的倍数；3 级每小格 1 度（0-40）；4 级还会有零下（-10 到 40）
+  L.genThermo = function (level, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    const lo = l === 4 ? -10 : 0, hi = 40, unit = [10, 5, 1, 1][l - 1];
+    let t = lo + unit * L.randInt(rnd, 0, (hi - lo) / unit);
+    if (l >= 3 && t % 5 === 0) t += t < hi ? 1 : -1;     // 不总落在有数字的整格上
+    const step = l === 1 ? 10 : l === 2 ? 5 : 1;
+    const cand = [t - step, t + step, t + 2 * step, t - 2 * step, t + 3 * step, t - 3 * step].filter((v, i, a) => v >= lo && v <= hi && v !== t && a.indexOf(v) === i);
+    const vals = L.shuffle(rnd, L.shuffle(rnd, cand).slice(0, 2).concat([t]));
+    const fmt = (v) => v + '°C';
+    const say = (v) => (v < 0 ? '零下' + L.numZh(-v) : L.numZh(v)) + '度';
+    const feel = t <= 5 ? '很冷' : t <= 15 ? '有点凉' : t <= 26 ? '很舒服' : t <= 33 ? '有点热' : '很热';
+    return { level: l, lo, hi, temp: t, answer: fmt(t), say: say(t), feel, options: vals.map(fmt) };
+  };
+
+  /* ---------- 数水壶容量：量杯里的水有多少 ---------- */
+  // 1 级 1-5 升（每格 1 升）；2 级 1-10 升；3 级 毫升，每格 100；4 级 毫升，每小格 50，还有“半格”
+  L.genJug = function (level, rnd) {
+    rnd = rnd || Math.random; const l = lv(level);
+    const unit = l === 3 ? 100 : l === 4 ? 50 : 1, max = l === 1 ? 5 : l === 2 ? 10 : 1000;
+    let v = unit * L.randInt(rnd, 1, max / unit - (l >= 3 ? 1 : 0));
+    const u = l >= 3 ? '毫升' : '升';
+    const step = unit;
+    const cand = [v - step, v + step, v + 2 * step, v - 2 * step, v + 3 * step, v - 3 * step].filter((x, i, a) => x >= unit && x <= max && x !== v && a.indexOf(x) === i);
+    const vals = L.shuffle(rnd, cand.slice(0, 6).sort((a, b) => Math.abs(a - v) - Math.abs(b - v)).slice(0, 2).concat([v]));
+    return { level: l, max, unit, value: v, uname: u, answer: v + u, say: L.numZh(v) + u, options: vals.map(x => x + u) };
+  };
+
   /* ---------- 认时间：时钟 ---------- */
   const minZh = (m) => m < 10 ? '零' + ZH[m] : m < 20 ? L.numZh(m) : ZH[Math.floor(m / 10)] + '十' + (m % 10 ? ZH[m % 10] : '');
   // 读法：3 点读“三点”、2 点读“两点”、30 分读“半”；5 分读“零五分”

@@ -568,3 +568,16 @@ test('读角度：答案对、选项互异、在量角器范围内', () => {
     if (l < 4) assert.strictEqual(q.from, 0); else assert.ok(q.from >= 10);
   } });
 });
+
+test('温度计、量杯：答案对、选项互异、范围内', () => {
+  [1, 2, 3, 4].forEach(l => { for (let k = 0; k < 300; k++) {
+    const t = L.genThermo(l, rnd);
+    assert.ok(t.options.includes(t.answer)); assert.ok(distinct(t.options)); assert.strictEqual(t.options.length, 3);
+    assert.ok(t.temp >= t.lo && t.temp <= t.hi);
+    if (l < 4) assert.ok(t.temp >= 0);
+    const j = L.genJug(l, rnd);
+    assert.ok(j.options.includes(j.answer)); assert.ok(distinct(j.options)); assert.strictEqual(j.options.length, 3);
+    assert.ok(j.value > 0 && j.value <= j.max);
+  } });
+  assert.strictEqual(L.genThermo(4, () => 0).say, '零下九度');
+});

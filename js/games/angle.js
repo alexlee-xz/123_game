@@ -28,7 +28,7 @@
   }
 
   NG.registerGame({
-    id: 'angle', stage: 6, icon: '📐', title: '读角度', blurb: '看量角器，读几度',
+    id: 'angle', stage: 7, icon: '📐', title: '读角度', blurb: '看量角器，读几度',
     round(level, api) {
       const q = L.genAngle(level);
       api.prompt(q.level === 4 ? '这个角是多少度？' : '橙色的角是多少度？');

@@ -24,7 +24,7 @@
   }
 
   NG.registerGame({
-    id: 'ruler', stage: 5, icon: '📏', title: '读尺子', blurb: '量一量，有几厘米',
+    id: 'ruler', stage: 7, icon: '📏', title: '读尺子', blurb: '量一量，有几厘米',
     round(level, api) {
       const q = L.genRuler(level);
       api.prompt('这支铅笔有多长？');
